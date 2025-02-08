@@ -1,10 +1,26 @@
-# <center> 视觉slam学习笔记 </center>
+# <center> 视觉slam学习笔记 </center>  
+- [ 视觉slam学习笔记 ](#-视觉slam学习笔记-)
+- [RTABMAP](#rtabmap)
+  - [内存更新](#内存更新)
+    - [创建签名](#创建签名)
+    - [添加签名到STM](#添加签名到stm)
+    - [更新权重](#更新权重)
+    - [签名转移 (STM-\>WM)](#签名转移-stm-wm)
+  - [贝叶斯滤波更新](#贝叶斯滤波更新)
+    - [计算似然](#计算似然)
+    - [调整似然](#调整似然)
+    - [计算后验](#计算后验)
+  - [回环假设选择](#回环假设选择)
+  - [取回 Retrieval (LTM-\>WM)](#取回-retrieval-ltm-wm)
+  - [转移 Transfer (STM-\>LTM)](#转移-transfer-stm-ltm)
+
 # RTABMAP    
 Real‐Time Appearance‐Based Mapping (RTAB‐Map)是一种基于外观的闭环检测方法，具有良好的内存管理，以满足处理大场景和在线长周期管理要求。RTAB‐Map集成了视觉和激光雷达SLAM方案，并支持目前绝大多数的传感器,主要特点：
 1. 基于外观（Appearance-Based），通过图像相似度查找回环
 2. 贝叶斯滤波算法，估计回环的概率
 3. 增量式在线构建视觉词典或词袋，针对一个特定环境不需要预训练过程
-4. 内存管理模型，保证实时在线运行    
+4. 内存管理模型，保证实时在线运行     
+![alt text](image-6.png)  
 代码主要过程：
 RTABMap（闭环检测）主入口函数 [Rtabmap::process](./rtabmap/corelib/src/Rtabmap.cpp)
 输入图像image及其id（header.seq）被封装到SensorData类,还有里程计的信息
@@ -30,7 +46,8 @@ TRANSFER: move the oldest signature from STM to LTM
 回环检测（若不考虑内存管理）过程：     
 ![alt text](image-2.png)      
 ## 内存更新    
-内存更新的过程包括Memory Update : Location creation + Add to STM + Weight Update (Rehearsal排演)，在主函数入口[Rtabmap::process](./rtabmap/corelib/src/Rtabmap.cpp)中的_memory->update()代码段进行调用，定义在[Memory::update()](./rtabmap/corelib/src/Memory.cpp) 函数中。
+内存更新的过程包括Memory Update : Location creation + Add to STM + Weight Update (Rehearsal排演)，在主函数入口[Rtabmap::process](./rtabmap/corelib/src/Rtabmap.cpp)中的_memory->update()代码段进行调用，定义在[Memory::update()](./rtabmap/corelib/src/Memory.cpp) 函数中。   
+![alt text](image-4.png)
 ### 创建签名     
 代码在 [Memory::createSignature](./rtabmap/corelib/src/Memory.cpp) 中，其主要过程为
 1. 词典更新定义在[VWDictionary::update](./rtabmap/corelib/src/VWDictionary.cpp) ，调用如下线程:
@@ -79,8 +96,11 @@ TRANSFER: move the oldest signature from STM to LTM
 4. 量化描述子转化为词典quantize descriptors to vocabulary函数调用在_vwd->addNewWords(descriptorsForQuantization, id)，函数定义在[VWDictionary::addNewWords](./rtabmap/corelib/src/VWDictionary.cpp)
 描述子匹配(descriptors – dataTree)，调用函数_flannIndex->knnSearch(descriptors, results, dists, k, KNN_CHECKS);，并计算距离dists    
 添加单词 或 参考+1
-badDist=true（匹配数量特别少，或 NNDR(neareast neighbor distance ratio) 大于阈值_nndrRatio，然后创建VisualWord并添加到_visualWords      
-![alt text](image-3.png) 
+badDist=true（匹配数量特别少，或 NNDR(neareast neighbor distance ratio) 大于阈值_nndrRatio，然后创建VisualWord并添加到_visualWords  
+badDist=false，VWDictionary::addWordRef，_references+1   
+$$
+NNDR = \frac{dist of the neareast neighbor}{dist of the second neareast neighbor}
+$$   
 ```C++ 
 if(_incrementalDictionary)
 {
@@ -109,10 +129,37 @@ if(_incrementalDictionary)
     {
         resultIds[i] = fullResults.begin()->second; // Accepted
     }
+
+    if(badDist)
+    {
+        // use original descriptor
+        //然后创建VisualWord并添加到_visualWords  
+        VisualWord * vw = new VisualWord(getNextId(), descriptorsIn.row(i), signatureId);
+        _visualWords.insert(_visualWords.end(), std::pair<int, VisualWord *>(vw->id(), vw));
+        _notIndexedWords.insert(_notIndexedWords.end(), vw->id());
+        newWords.push_back(descriptors.row(i));
+        newWordsId.push_back(vw->id());
+        wordIds.push_back(vw->id());
+        UASSERT(vw->id()>0);
+    }
+    else
+    {
+        if(_notIndexedWords.find(fullResults.begin()->second) != _notIndexedWords.end())
+        {
+            ++dupWordsCountFromLast;
+        }
+        else
+        {
+            ++dupWordsCountFromDict;
+        }
+        //增加addWordRef
+        this->addWordRef(fullResults.begin()->second, signatureId);
+        wordIds.push_back(fullResults.begin()->second);
+    }
 }
 ```   
 
-5. 创建签名(new Signature)，函数定义在[Signature](./rtabmap/corelib/src/Signature.cpp)。
+5. 创建签名(new Signature)，函数定义在[Signature](./rtabmap/corelib/src/Signature.cpp)。主要是图像的提取的特征，匹配信息，词袋模型信息等
 
 ```C++ 
 s = new Signature(id,
@@ -165,4 +212,350 @@ s = new Signature(id,
 						id,
 						0,
 						compressedUserData));
+```        
+对单词简单理解如系：首先，假设我们对大量的图像提取了特征点，比如说有 N 个。现在，我们想找一个有 k 个单词的字典，每 个单词可以看作局部相邻特征点的集合，应该怎么做呢？这可以用经典的 K-means（K均值）算法解决。步骤如下：
+随机选取k个中心点；
+对每个样本计算他们与中心点的距离，取最小距离为归类；
+重新计算每个类的中心点；
+如果中心点的变化很小则算法收敛，退出；否则返回2     
+![alt text](image-7.png) 
+根据 K-means，我们可以把已经提取的大量特征点聚类成一个含有k个单词的字典了。现在的问题，变为如何根据图像中某个特征点，查找字典中相应的单词？ 一般使用K叉树，步骤是：
+在根节点，用k-means将所有样本聚成k类
+对上层的每个父节点，把属于该节点的样本再次聚成k类，得到下一层。
+以此类推，最后得到叶子层，也就是所谓的单词。
+![alt text](image-8.png) 
+### 添加签名到STM
+调用的代码在[this->addSignatureToStm(signature, covariance)](./rtabmap/corelib/src/Memory.cpp),代码定义在 Memory::addSignatureToStm()中。   
+更新neighbors，添加链接(signature->addLink),添加签名ID到_stMem  
+### 更新权重   
+函数调用在[this->rehearsal(signature, stats)](./rtabmap/corelib/src/Memory.cpp),代码主要在 Memory::rehearsal 中。   
+1. signature与STM中最新的签名比较，计算相似度(float sim = signature->compareTo(*sB))    
+$$
+similarity = \frac{pairs}{totalWords} 
+$$ 
+2. 相似度 > 阈值_similarityThreshold，假设合并(Memory::rehearsalMerge)，更新权重(signature->setWeight)     
+$$
+\omega_A = \omega_A + \omega_B + 1
+$$
+```C++ 
+if(sB)
+{
+    int id = sB->id();
+    UDEBUG("Comparing with signature (%d)...", id);
+
+    float sim = signature->compareTo(*sB);
+
+    int merged = 0;
+    if(sim >= _similarityThreshold)
+    {
+        if(_incrementalMemory)
+        {
+            //新旧签名合并
+            if(this->rehearsalMerge(id, signature->id()))
+            {
+                merged = id;
+            }
+        }
+        else
+        {
+            signature->setWeight(signature->getWeight() + 1 + sB->getWeight());
+        }
+    }
+
+    if(stats) stats->addStatistic(Statistics::kMemoryRehearsal_merged(), merged);
+    if(stats) stats->addStatistic(Statistics::kMemoryRehearsal_sim(), sim);
+    if(stats) stats->addStatistic(Statistics::kMemoryRehearsal_id(), sim >= _similarityThreshold?id:0);
+    UDEBUG("merged=%d, sim=%f t=%fs", merged, sim, timer.ticks());
+}   
+```     
+### 签名转移 (STM->WM)    
+将签名在短期内存转移到工作内存，Memory::moveSignatureToWMFromSTM:_workingMem.insert 和 _stMem.erase    
+## 贝叶斯滤波更新   
+逆向索引表对应着每个单词，记录着它出现在各个图像中的权重。比如，上图中 'Word 1' 在 'Image 68'、'Image 82' 等图像中出现了，在这两个图像中的权重分别是 0.79 和 0.73。 DBoW2 以TF-IDF(Term Frequency - Inverse Document Frequency)的形式计算单词i出现在图像d中的权重(跟代码的还是有点区别):
+$$
+v_d^i = \frac{n_d^i}{n_d} \log {\frac{N}{N^i}}
+$$
+![alt text](image-3.png)         
+其中，$n_d$表示图像d中特征点数量，$n^i_d$则是图像d中单词i出现的次数，$\frac{n_d^i}{n_d}$就是所谓的 TF(Term Frequency) 表示单词i出现的频率。 N为离线训练字典文件时所用的特征点数量，$N_i$是训练时单词i的数量，$\log {\frac{N}{N^i}}$是 IDF(Inverse Document Frequency)。IDF 的逻辑在于， 如果某个单词出现在字典中的频率越低，其辨识度就越高，权重应该更大。     
+1、逆序索引单词涵盖了所有出现的单词
+2、每一个单词指向包含它的一系列图像
+3、采用投票机制选取候选者，加速搜索
+![alt text](image-5.png)    
+正向索引表对应着每个图像，记录着它所包含的词汇树中的各级节点。对于图像d，计算出它的各个特征点，然后根据 Hamming 距离从词汇树的根节点到叶子节点， 将所有特征点的 BRIEF 描述子逐级遍历一遍，得到图像的特征向量$\boldsymbol{v_d} \in \mathbb{R}^W$。正向索引表记录了遍历到的各个节点计数，描述了***图像的特征***。 它可以用于加速特征匹配，前面提到的 SearchByBoW() 就是利用了这个数据结构，压缩了搜索空间。      
+### 计算似然
+计算似然（权重）(Memory::computeLikelihood)，得到 rawLikelihood
+```C++ 
+float nwi; // nwi is the number of a specific word referenced by a place
+float ni; // ni is the total of words referenced by a place
+float nw; // nw is the number of places referenced by a specific word
+float N; // N is the total number of places
+
+float logNnw;
+const VisualWord * vw;
+
+N = this->getSignatures().size();
+
+if(N)
+{
+    UDEBUG("processing... ");
+    // Pour chaque mot dans la signature SURF
+    for(std::list<int>::const_iterator i=wordIds.begin(); i!=wordIds.end(); ++i)
+    {
+        if(*i>0)
+        {
+            // "Inverted index" - Pour chaque endroit contenu dans chaque mot
+            vw = _vwd->getWord(*i);
+            UASSERT_MSG(vw!=0, uFormat("Word %d not found in dictionary!?", *i).c_str());
+
+            const std::map<int, int> & refs = vw->getReferences();
+            nw = refs.size();
+            if(nw)
+            {
+                logNnw = log10(N/nw);
+                if(logNnw)
+                {
+                    for(std::map<int, int>::const_iterator j=refs.begin(); j!=refs.end(); ++j)
+                    {
+                        std::map<int, float>::iterator iter = likelihood.find(j->first);
+                        if(iter != likelihood.end())
+                        {
+                            nwi = j->second;
+                            ni = this->getNi(j->first);
+                            if(ni != 0)
+                            {
+                                //UDEBUG("%d, %f %f %f %f", vw->id(), logNnw, nwi, ni, ( nwi  * logNnw ) / ni);
+                                iter->second += ( nwi  * logNnw ) / ni;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+UDEBUG("compute likelihood (tf-idf) %f s", timer.ticks());   
+```  
+### 调整似然
+调整似然[Rtabmap::adjustLikelihood](./rtabmap/corelib/src/Rtabmap.cpp) $v_d^i$，得到 likelihood，依据 似然均值$\mu$和 似然标准差$\sigma$ 。
+$$
+likelihood =
+\begin{cases}
+\frac{v_d^i-\mu}{\sigma}& v_d^i>=\mu + \sigma\\
+max&  v_d^i >max
+\end{cases}
+$$            
+```C++ 
+// Adjust the likelihood (with mean and std dev)
+likelihood = rawLikelihood;
+this->adjustLikelihood(likelihood);
+
+float mean = uMean(values);
+	float stdDev = std::sqrt(uVariance(values, mean));
+
+
+//Adjust likelihood with mean and standard deviation (see Angeli phd)
+float epsilon = 0.0001;
+float max = 0.0f;
+int maxId = 0;
+for(std::map<int, float>::iterator iter=++likelihood.begin(); iter!= likelihood.end(); ++iter)
+{
+    float value = iter->second;
+    iter->second = 1.0f;
+    if(value > mean+stdDev)
+    {
+        if(_virtualPlaceLikelihoodRatio==0 && mean)
+        {
+            iter->second = (value-(stdDev-epsilon))/mean;
+        }
+        else if(_virtualPlaceLikelihoodRatio!=0 && stdDev)
+        {
+            iter->second = (value-mean)/stdDev;
+        }
+    }
+
+    if(value > max)
+    {
+        max = value;
+        maxId = iter->first;
+    }
+}
 ```
+### 计算后验
+计算后验[_bayesFilter->computePosterior](./rtabmap/corelib/src/Rtabmap.cpp)，函数定义在[BayesFilter::computePosterior](./rtabmap/corelib/src/BayesFilter.cpp)，得到 posterior。 
+
+```C++ 
+//============================================================
+// Apply the Bayes filter
+//  Posterior = Likelihood x Prior
+//============================================================
+ULOGGER_INFO("getting posterior...");
+
+// Compute the posterior
+posterior = _bayesFilter->computePosterior(_memory, likelihood);
+timePosteriorCalculation = timer.ticks();
+ULOGGER_INFO("timePosteriorCalculation=%fs",timePosteriorCalculation);   
+
+//计算后验
+const std::map<int, float> & BayesFilter::computePosterior(const Memory * memory, const std::map<int, float> & likelihood)
+{
+	ULOGGER_DEBUG("");
+
+	if(!memory)
+	{
+		ULOGGER_ERROR("Memory is Null!");
+		return _posterior;
+	}
+
+	if(!likelihood.size())
+	{
+		ULOGGER_ERROR("likelihood is empty!");
+		return _posterior;
+	}
+
+	if(_predictionLC.size() < 2)
+	{
+		ULOGGER_ERROR("Prediction is not valid!");
+		return _posterior;
+	}
+
+	UTimer timer;
+	timer.start();
+
+	cv::Mat prior;
+	cv::Mat posterior;
+
+	float sum = 0;
+	int j=0;
+	// Recursive Bayes estimation...
+	// STEP 1 - Prediction : Prior*lastPosterior
+    //预测(Prediction : Prior*lastPosterior)得到_prediction
+	_prediction = this->generatePrediction(memory, uKeys(likelihood));
+
+	UDEBUG("STEP1-generate prior=%fs, rows=%d, cols=%d", timer.ticks(), _prediction.rows, _prediction.cols);
+	//std::cout << "Prediction=" << _prediction << std::endl;
+
+	// Adjust the last posterior if some images were
+	// reactivated or removed from the working memory
+    //更新后验(BayesFilter::updatePosterior)
+	posterior = cv::Mat(likelihood.size(), 1, CV_32FC1);
+	this->updatePosterior(memory, uKeys(likelihood));
+	j=0;
+	for(std::map<int, float>::const_iterator i=_posterior.begin(); i!= _posterior.end(); ++i)
+	{
+		((float*)posterior.data)[j++] = (*i).second;
+	}
+	ULOGGER_DEBUG("STEP1-update posterior=%fs, posterior=%d, _posterior size=%d", posterior.rows, _posterior.size());
+	//std::cout << "LastPosterior=" << posterior << std::endl;
+
+	// Multiply prediction matrix with the last posterior
+	// (m,m) X (m,1) = (m,1)
+    //计算先验(prior = _prediction * posterior)
+	prior = _prediction * posterior;
+	ULOGGER_DEBUG("STEP1-matrix mult time=%fs", timer.ticks());
+	//std::cout << "ResultingPrior=" << prior << std::endl;
+
+	ULOGGER_DEBUG("STEP1-matrix mult time=%fs", timer.ticks());
+	std::vector<float> likelihoodValues = uValues(likelihood);
+	//std::cout << "Likelihood=" << cv::Mat(likelihoodValues) << std::endl;
+
+	// STEP 2 - Update : Multiply with observations (likelihood)
+	j=0;
+	for(std::map<int, float>::const_iterator i=likelihood.begin(); i!= likelihood.end(); ++i)
+	{
+		std::map<int, float>::iterator p =_posterior.find((*i).first);
+		if(p!= _posterior.end())
+		{
+			//posterior=likelihood×prior
+            (*p).second = (*i).second * ((float*)prior.data)[j++];
+			sum+=(*p).second;
+		}
+		else
+		{
+			ULOGGER_ERROR("Problem1! can't find id=%d", (*i).first);
+		}
+	}
+	ULOGGER_DEBUG("STEP2-likelihood time=%fs", timer.ticks());
+	//std::cout << "Posterior (before normalization)=" << _posterior << std::endl;
+
+	// Normalize后验归一化
+	ULOGGER_DEBUG("sum=%f", sum);
+	if(sum != 0)
+	{
+		for(std::map<int, float>::iterator i=_posterior.begin(); i!= _posterior.end(); ++i)
+		{
+			(*i).second /= sum;
+		}
+	}
+	ULOGGER_DEBUG("normalize time=%fs", timer.ticks());
+	//std::cout << "Posterior=" << _posterior << std::endl;
+
+	return _posterior;
+}
+```     
+## 回环假设选择      
+RTAB-Map用离散贝叶斯过滤器来估计形成闭环的概率，将新的定位点与存储在WM中的定位点进行比较。当发现新旧定位点之间有高概率形成闭环时，一个闭环就被检测到了，新旧定位点也就被链接在一起。有两个关键个步骤，一个是“取回”:对于具有形成闭环概率最高的那个定位点，将它的那些没有在WM中的领接定位点，重新从LTM中取出放回到WM中。第二个步骤叫做“转移”:当闭环检测的处理时间超过阀值,具有最低权重的定位点中，存储时间最长的将被转移到LTM中，被转移的定位点的数量取决于当前依赖循环中的WM存储的定位点的数量。    
+
+根据后验posterior，选择最高的假设_highestHypothesis   
+```C++ 
+//============================================================
+// Select the highest hypothesis
+//============================================================
+ULOGGER_INFO("creating hypotheses...");
+if(posterior.size())
+{
+    for(std::map<int, float>::const_reverse_iterator iter = posterior.rbegin(); iter != posterior.rend(); ++iter)
+    {
+        if(iter->first > 0 && iter->second > _highestHypothesis.second)
+        {
+            _highestHypothesis = *iter;
+        }
+    }
+    // With the virtual place, use sum of LC probabilities (1 - virtual place hypothesis).
+    _highestHypothesis.second = 1-posterior.begin()->second;
+}
+```
+接受回环，条件如下：  
+```C++ 
+// Loop closure Threshold
+if(_highestHypothesis.second >= loopThr)
+{
+    rejectedGlobalLoopClosure = true;
+    if(posterior.size() <= 2 && loopThr>0.0f)
+    {
+        // Ignore loop closure if there is only one loop closure hypothesis
+        UDEBUG("rejected hypothesis: single hypothesis");
+    }
+    //对极几何 检查(_epipolarGeometry->check)：1、单词匹配对数量(EpipolarGeometry::findPairsUnique) > _matchCountMinAccepted
+    //2、对极约束内点数(EpipolarGeometry::findFFromWords) > _matchCountMinAccepted
+    else if(_verifyLoopClosureHypothesis && !_epipolarGeometry->check(signature, _memory->getSignature(_highestHypothesis.first)))
+    {
+        UWARN("rejected hypothesis: by epipolar geometry");
+    }
+    else if(_loopRatio > 0.0f && lastHighestHypothesis.second && _highestHypothesis.second < _loopRatio*lastHighestHypothesis.second)
+    {
+        UWARN("rejected hypothesis: not satisfying hypothesis ratio (%f < %f * %f)",
+                _highestHypothesis.second, _loopRatio, lastHighestHypothesis.second);
+    }
+    else if(_loopRatio > 0.0f && lastHighestHypothesis.second == 0)
+    {
+        UWARN("rejected hypothesis: last closure hypothesis is null (loop ratio is on)");
+    }
+    else
+    {
+        _loopClosureHypothesis = _highestHypothesis;
+        rejectedGlobalLoopClosure = false;
+    }
+
+    timeHypothesesValidation = timer.ticks();
+    ULOGGER_INFO("timeHypothesesValidation=%fs",timeHypothesesValidation);
+}
+```   
+## 取回 Retrieval (LTM->WM)
+对于形成回环概率最高的定位点，将他那些没有在WM中的邻接定位点，从LTM中取回放入到WM中。    
+##  转移 Transfer (STM->LTM)  
+具有最低权重的定位点中，存储时间最长的将被转移到LTM（数据库SQLite）中。
+
+ 
+
+
