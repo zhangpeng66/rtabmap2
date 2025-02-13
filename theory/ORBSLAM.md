@@ -1,5 +1,7 @@
 # <center>orbslam notebook </center>
 
+![alt text](image-4.png)
+
 ## 矩阵的性质
 
 **（1）正交矩阵相乘仍然是正交矩阵** 
@@ -22,7 +24,7 @@
 
 **（8）任意矩阵都能进行奇异值分解，只有方阵才可以进行特征值分解** 
 
-**特征值分解：** 
+**特征值分解** 
 
 如果一个向量 *v* 是方阵 *A*的特征向量，将可以表示成下面的形式： *Av= λv*，*λ* 称为特征向量 *v* 对应的特征值，并且一个矩阵的一组特征向量是一组正交向量。 
 
@@ -62,6 +64,7 @@ $A = U{\Sigma}V^{T}$
 由齐次线性方程组解空间维数 = n - r(A) >0，所以该齐次线性方程组有非零解，而且不唯一，存在一个基础解系（基础解系中的向量个数为 n - r(A)个)。 
 
 ### **特殊矩阵的性质**
+
 **一：为什么本质矩阵(E)的秩为2？** 
 
 **（1）因为一个矩阵乘以可逆矩阵秩不变，因为可逆矩阵可以表示为初等矩阵的乘积，而初等变换不改变矩阵的秩。** 
@@ -103,16 +106,14 @@ $\boldsymbol{F} = \boldsymbol{K}^{-T}[\boldsymbol{t}]_{\times}\boldsymbol{R}\bol
 **三：为什么尺度等价性要减少一个自由度？** 
 
 以本质矩阵为例，表达两帧的相机归一化坐标之间的对应关系
-
 ![](./orbslam_images/GetImage32.png)
-
 将矩阵写成向量，转化为下式： 
-
 ![](./orbslam_images/GetImage33.png)
-
 由于等式右侧是0，所以上面两式子乘以任意常数以后还是表示同样两点之间的变换，所以E是尺度等价的。 
-
 由于尺度等价性，所以对于9个参数的向量e，我们只需要通过8个方程计算出其中8个未知数即可， 8个数都用第9个数表示，由于尺度等价，所以第9个数取什么值都是对的。 
+单目相机的初始化往往由对极几何约束完成。对极几何约束应用的场景是已知两幅图像之间若干匹配点，求解两幅图像之间的相机运动，是一个2D-2D的问题。详细的推导过程可以参考《视觉SLAM14讲》中的过程，其核心求解是一个本质矩阵E（或者带有内参矩阵的基础矩阵），本质矩阵E的特点是具有尺度等价性。位姿R和t是由E通过奇异值分解得到的，其中R是正交矩阵，其逆等于自身的转置，相当于自身的约束可以克服掉尺度等价性；但是t没有办法克服尺度等价性，即这个t乘上任意一个非零的正数，都能满足对极几何约束。   
+![alt text](image-6.png)
+对极几何约束的几何意义是$O_L,O_R,X$三点共面，纯旋转情况下$O_L,O_R$共点，t为0，本质矩阵也为0,无法分解出R。通常的初始化做法是，将t归一化，让其长度等于1，并作为单位计算相机的运动和图像特征点对应的3D点位置。初始化之后，便可以利用3D-2D的PnP方法，求解后续相邻帧的运动位姿。至于这个长度1对应到真实世界中的长度可能是5cm,也可能是40m，这就需要额外的深度信息介入进行确定，这个以t的长度作为单位的尺度世界只和真实世界之间相差一个尺度因子。
 
 **四：为什么基础矩阵自由度是7？** 
 
@@ -140,13 +141,10 @@ $\boldsymbol{F} = \boldsymbol{K}^{-T}[\boldsymbol{t}]_{\times}\boldsymbol{R}\bol
 
 ![](./orbslam_images/GetImage35.jpeg)
 
- ## **计算基础矩阵** 
+## **基础矩阵**    
+ 计算基础矩阵的函数定义在[TwoViewReconstruction::FindFundamental()](../ORB_SLAM3/src/TwoViewReconstruction.cc)。
 
- ### **1. 基于代数误差的线性估计** 
-
- **(1) 8点法，线性最小二乘法** 
-
- **a. 线性解** 
+### **计算基础矩阵** 
 
 计算基础矩阵 *f*, 8组对应坐标点构成系数矩阵A，维度为8*9。 
 假设$\boldsymbol{x} = \begin{bmatrix} u & v & 1 \end{bmatrix}^T$为参考帧中的像素齐次坐标， $\boldsymbol{x'} = \begin{bmatrix} u' & v' & 1 \end{bmatrix}^T$为当前帧中与之匹配的坐标。那么式(1)可以展开如下:
@@ -190,9 +188,9 @@ $$
 
 ![](./orbslam_images/GetImage38.png)
 
-**(2) 归一化 8点法**（ORB-SLAM：FindFundamental）（OpenCV：findFundamentalMat—runkenel—run8point） 
+**(2) 归一化 8点法**（ 
 
-8点法成功的关键是在构造解的方程之前应对输入的数据认真进行适当的归 一化，图像点的一个简单变换(平移或变尺度)将使这个问题的条件极大地改善，从而提高结果的稳定性 
+8点法成功的关键是在构造解的方程之前应对输入的数据认真进行适当的归 一化，图像点的一个简单变换(平移或变尺度)将使这个问题的条件极大地改善，从而提高结果的稳定性，函数定义在[TwoViewReconstruction::Normalize()](../ORB_SLAM3/src/TwoViewReconstruction.cc)。 
 
 **算法步骤：** 
 
@@ -204,7 +202,7 @@ $$
 
 **b. 求解基础矩阵F，步骤在8点法里** 
 
- **c. 解除归一化** 
+**c. 解除归一化** 
 
 ![](./orbslam_images/GetImage41.jpeg)
 
@@ -248,7 +246,8 @@ $$
 
 ![](./orbslam_images/GetImage43.jpeg)
 
-### **基础矩阵的分解** 
+### **基础矩阵的分解**   
+基础矩阵的分解函数定义在[TwoViewReconstruction::ReconstructF()](../ORB_SLAM3/src/TwoViewReconstruction.cc)。
 
 根据基础矩阵$\boldsymbol{F} = \boldsymbol{K}^{-T}[\boldsymbol{t}]_{\times}\boldsymbol{R}\boldsymbol{K}^{-1}$和本质矩阵$\boldsymbol{E} = [\boldsymbol{t}]_{\times}\boldsymbol{R}$的定义，其中K是相机的内参矩阵， 我们可以从刚刚求解出的基础矩阵中算出本征矩阵:    
 $\boldsymbol{E} = \boldsymbol{K}^T \boldsymbol{FK}$   
@@ -308,7 +307,7 @@ $$
 
  **d. 检查3D点在两个相机的重投影误差，在误差允许范围内的计算内点数** 
 
-## **计算本质矩阵（ORBSLAM是先计算基础矩阵F，然后通过相机内参计算E，没有直接计算E）**
+**计算本质矩阵（ORBSLAM是先计算基础矩阵F，然后通过相机内参计算E，没有直接计算E）**
 
 ![](./orbslam_images/GetImage45.png)
 
@@ -327,7 +326,8 @@ $$
 ![GetImage47](./orbslam_images/GetImage47.png)
 
 ## **单应矩阵** 
-### **计算单应矩阵**
+### **计算单应矩阵**   
+计算单应性矩阵的函数定义在[TwoViewReconstruction::FindHomography()](../ORB_SLAM3/src/TwoViewReconstruction.cc)。
 针对平面场景，根据摄影变换关系建立了两幅图像之间各点的一一对应关系。 这个映射关系可以用一个3×3的齐次矩阵H来表示，我们称之为单应矩阵。 假设x,x′分别是初始化过程中的参考帧和当前帧中匹配的两个特征点，K为相机的内参，被观测的平面的法向量是N，平面到参考帧的距离为d， 可以推导出x,x′存在如下的关系:
 $$
 \begin{equation}\
@@ -367,7 +367,8 @@ $$
 $$    
 假设我们有 m 对匹配点，根据上式我们可以写出 2m 个约束，可以写成 $A\hat{H} = \boldsymbol{0}$的矩阵形式，如下，由于尺度因子的存在，求解时一般认为$h_9=1$，所以向量$\hat{H}$中只有8个未知数，至少需要4对匹配点，写出8个线性方程才可以求解。
 
-### **单应矩阵的分解**     
+### **单应矩阵的分解**  
+单应性矩阵分解的函数定义在[TwoViewReconstruction::ReconstructH()](../ORB_SLAM3/src/TwoViewReconstruction.cc)。   
 下图表示场景中的平面M在两相机的成像，设平面M在第一个相机坐标系下的单位法向量为N，其到第一个相机中心（坐标原点）的距离为d，则平面M可表示为：$N^TX_1 = d$  
 $\frac{1}{d}N^TX_1 = 1,\forall X_1 \in \pi$  转换下
 其中，$X_1$是三维点P在第一相机坐标系下的坐标，其在第二个相机坐标系下的坐标为$X_2$，则
@@ -383,7 +384,7 @@ $H' = R+T\frac{1}{d}N^T$
 ![alt text](image-3.png)   
 ORB-SLAM2 只处理 $d_1>d_2>d_3$ 的情况，根据$d', \varepsilon_1, \varepsilon_3$的符号一共有 8 种不同的解。 下面我们详细分析函数 ReconstructH，了解具体的实现过程。  
 ## **三角测量原理**    
-现在假设相机的内参矩阵为K，根据单应矩阵或者基础矩阵估计出相机的旋转矩阵R和平移向量t。那么对于空间中一点$\boldsymbol{X} = \begin{bmatrix} x & y & z \end{bmatrix}^T$， 其在相机中的成像点$\boldsymbol{x} = \begin{bmatrix} u & v & 1 \end{bmatrix}^T$ 。那么我们可以写出3D坐标到2D像素之间的投影关系：   
+函数的定义在[GeometricTools::Triangulate()](../ORB_SLAM3/src/GeometricTools.cc)，在检查R和t的时候用到**TwoViewReconstruction::CheckRT**，现在假设相机的内参矩阵为K，根据单应矩阵或者基础矩阵估计出相机的旋转矩阵R和平移向量t。那么对于空间中一点$\boldsymbol{X} = \begin{bmatrix} x & y & z \end{bmatrix}^T$， 其在相机中的成像点$\boldsymbol{x} = \begin{bmatrix} u & v & 1 \end{bmatrix}^T$ 。那么我们可以写出3D坐标到2D像素之间的投影关系：   
 $$
 \boldsymbol{x} = \cfrac{1}{z} \boldsymbol{K} [\boldsymbol{R} | \boldsymbol{t}] \boldsymbol{X} 
 $$
@@ -431,7 +432,8 @@ $$
 ## **PnP问题**   
 PnP 问题(Perspective-n-Point Problem)是，已知相机内参矩阵K和 n 个 3D 空间点${c_1,c_2,⋯,c_n}$及其到图像上 2D 的投影点${μ_1,μ_2,⋯,μ_n}$，求解相机的位置和姿态。记第 i 个 3D 空间点的齐次坐标为 $\boldsymbol{c_i} = \begin{bmatrix} x_i & y_i & z_i & 1\end{bmatrix}^T$，其在图像上投影的 2D 像素坐标为 $\boldsymbol{\mu_i} = \begin{bmatrix} u_i & v_i & 1 \end{bmatrix}^T$。 其投影过程，可以分解为两步：    
 1. 根据相机的位姿，将空间点从世界坐标系下变换到相机坐标系下。
-2. 将相机坐标系下的点，根据相机内参矩阵，投影到图像上。   
+2. 将相机坐标系下的点，根据相机内参矩阵，投影到图像上。     
+![alt text](image-5.png)  
 其整个过程相当于连续乘了两个矩阵：   
 $$
 s \begin{bmatrix} u_i \\ v_i \\ 1 \end{bmatrix} = \boldsymbol{K} \left[ \boldsymbol{R} \big | \boldsymbol{t} \right]
@@ -480,4 +482,327 @@ $$
             a_1 \\ a_2 \\ \vdots \\ a_{11} \\ a_{12}
         \end{bmatrix} = \boldsymbol{0}
 $$    
-当然上述DLT算法解得的是矩阵A，它包含了相机内参K、姿态矩阵R和平移向量t。 进一步的，通过QR分解，可以从矩阵A中把这三个都给分解出来。看起来这一过程还附带算出了相机的内参，这也正是相机的内参标定的求解过程。 DLT算法简单直接，但是它忽略了太多的约束，所以结果一般都不会很好。后来人们还研究出了很多求解 PnP 问题的算法，有只需要3个点就可以求解的P3P算法。 ORB-SLAM2 用的就是EPnP算法，效率高而且稳定，据说其算法复杂度是 O(n) 的。
+当然上述DLT算法解得的是矩阵A，它包含了相机内参K、姿态矩阵R和平移向量t。 进一步的，通过QR分解，可以从矩阵A中把这三个都给分解出来。看起来这一过程还附带算出了相机的内参，这也正是相机的内参标定的求解过程。 DLT算法简单直接，但是它忽略了太多的约束，所以结果一般都不会很好。后来人们还研究出了很多求解 PnP 问题的算法，有只需要3个点就可以求解的P3P算法。 ORB-SLAM2 用的就是EPnP算法，效率高而且稳定，据说其算法复杂度是 O(n) 的。      
+提供了三种估计相机位姿的方式，在正常情况下以匀速运动模型估计相机位姿；如果跟丢了，先通过参考关键帧估计相机位姿； 如果这样无法恢复，则尝试进行重定位。重定位的过程可以看做是从历史的关键帧中搜索出一个最有希望的作为新的参考关键帧估计相机位姿。 
+跟踪使用运动模型的**Tracking::TrackWithMotionModel()**，使用上一帧mLastFrame的3D点云来pnp求解[matcher.SearchByProjection(mCurrentFrame,mLastFrame](../ORB_SLAM3/src/ORBmatcher.cc);跟踪参考关键帧的**Tracking::TrackReferenceKeyFrame()**，使用最近的参考关键帧的3D点云来pnp求解[matcher.SearchByBoW(mpReferenceKF,mCurrentFrame](../ORB_SLAM3/src/ORBmatcher.cc);重定位**Tracking::Relocalization()**，使用历史上每一个关键帧pKF的3D点云pnp求解[matcher.SearchByBoW(pKF,mCurrentFrame](../ORB_SLAM3/src/ORBmatcher.cc);最后一个是跟踪局部地图**Tracking::TrackLocalMap()**，使用局部地图的3D点云来求解pnp[matcher.SearchByProjection(mCurrentFrame, mvpLocalMapPoints](../ORB_SLAM3/src/ORBmatcher.cc)。   
+## 重投影误差与BA优化函数  
+### 重投影误差 
+BA(Bundle Adjustment)，又称光束法平差（平差就是抹平误差）。BA的本质是一个优化模型，其目的是最小化重投影误差，所谓重投影误差就是二次投影与一次投影之间产生的误差。
+![alt text](image-7.png)   
+第一次投影指的就是相机在拍照的时候三维空间点投影到图像上第一次投影在相机平面产生了特征点$p_1$，我们可以计算出P的坐标位置。之后相机进行了运动，通过一些方法我们得到这个运动的数值，进而得到了它的位姿。由于我们现在知道相机的位姿（计算估计得来）和P的世界坐标，因此可以计算P在第二幅图下的投影，这就是所谓的第二次投影。此时在相机平面产生了特征点$p_2$，而通过特征匹配我们能够知道特征点$\hat{p}_2$的真实位置，两者会产生误差，这就是所谓的重投影误差。换句话说，重投影误差是指的真实三维空间点在图像平面上的投影（也就是图像上的像素点）和重投影（其实是用我们的计算值得到的虚拟的像素点）的差值。    
+给定N个两张图中完成匹配的点，记作：  
+${z_1} = \left\{ {z_1^1,z_1^2, \ldots ,z_1^N} \right\},{z_2} = \left\{ {z_2^1,z_2^2, \ldots ,z_2^N} \right\}$   
+已知相机的内参矩阵为K，求解相机的运动R,t，注意字符z上标表示第几个点。则：
+$z_i^j=[u,v]_i^j$   
+根据投影关系:
+$$
+\begin{equation} {\lambda _1}\left[ \begin{array}{l} z_1^j\\ 1 \end{array} \right] = K{P^j},\quad {\lambda _2}\left[ \begin{array}{l} z_2^j\\ 1 \end{array} \right] = K\left( {R{P^j} + t} \right) \end{equation}
+$$  
+已知观测方程为$z=h(x,y)$，其中x表示位姿，y表示路标。观测误差就可以表示为：  
+$e=z-h(\xi,p)$   
+z表示一次投影得到的特征点位置，$h(\xi,p)$表示二次投影的结果，h就是投影函数（这里用李代数表示，p表示三维点）。如果把所有观测结果考虑进来，给误差添加一个下标：$z_{ij}$表示位姿处$\xi_i$观测路标$p_i$产生的数据，最后就得到了需要优化的函数：  
+$$
+\frac{1}{2}\sum_{i=1}^{m}\sum_{j=1}^{n}||e_{ij}||^2=\frac{1}{2}\sum_{i=1}^{m}\sum_{j=1}^{n}||z_{ij}-h(\xi_i,p_j)||^2
+$$   
+### BA优化   
+根据非线性优化的思想，我们应该从某个的初始值开始，不断地寻找下降方向Δx
+来找到目标函数的最优解，即不断地求解增量方程中的增量Δx。首先需要把所有自变量定义成待优化变量：$x=[\xi_1,...,\xi_m,p_1,...,p_n]^T$，相应的，增量方程中的Δx
+则是对整体自变量的增量。在这个意义下，当我们给自变量一个增量时，目标函数变为：  
+$$
+\frac{1}{2}\|f(\boldsymbol{x}+\Delta \boldsymbol{x})\|^{2} \approx \frac{1}{2} \sum_{i=1}^{m} \sum_{i=1}^{n}\left\|\boldsymbol{e}_{i j}+\boldsymbol{F}_{i j} \Delta \boldsymbol{\xi}_{i}+\boldsymbol{E}_{i j} \Delta \boldsymbol{p}_{j}\right\|^{2}
+$$   
+其中$F_{ij}$代价函数对相对位姿的偏导数，$E_{ij}$表示该函数对路标点位置的偏导。 无论使用高斯牛顿法还是列文伯格—马夸尔特方法，最后都将面对增量线性方程：$\boldsymbol{H} \Delta \boldsymbol{x}=\boldsymbol{g}$，根据第6讲的知识，高斯牛顿法和列文伯格—马夸尔特方法的主要差别在于，这里的 $\boldsymbol H$ 是取 $\boldsymbol J^T\boldsymbol J$ 还是 $\boldsymbol J^T\boldsymbol J+\lambda \boldsymbol I$ 的形式。
+由于把变量归类成了位姿和空间点两种，所以雅可比矩阵可以分块为：  
+$
+\boldsymbol{J}=[\boldsymbol{F} \boldsymbol{E}]
+$   
+以高斯牛顿法为例，则 $\boldsymbol H$ 矩阵为：    
+$
+\boldsymbol{H}=\boldsymbol{J}^{\mathrm{T}} \boldsymbol{J}=\left[\begin{array}{ll}
+\boldsymbol{F}^{\mathrm{T}} \boldsymbol{F} & \boldsymbol{F}^{\mathrm{T}} \boldsymbol{E} \\
+\boldsymbol{E}^{\mathrm{T}} \boldsymbol{F} & \boldsymbol{E}^{\mathrm{T}} \boldsymbol{E}
+\end{array}\right]
+$   
+#### 稀疏性和边缘化    
+$\boldsymbol H$ 矩阵的稀疏性是由雅可比矩阵 $\boldsymbol J(\boldsymbol x)$ 引起的。
+考虑这些代价函数当中的其中一个 $\boldsymbol e_{ij}$
+注意，这个误差项只描述了在 $\boldsymbol T_i$ 看到 $\boldsymbol p_j$ 这件事，只涉及第 $i$ 个相机位姿和第 $j$ 个路标点，对其余部分的变量的导数都为 $0$。所以该误差项对应的雅可比矩阵有下面的形式：
+$$
+\boldsymbol{J}_{i j}(\boldsymbol{x})=\left(\mathbf{0}_{2 \times 6}, \ldots \boldsymbol{0}_{2 \times 6}, \frac{\partial \boldsymbol{e}_{i j}}{\partial \boldsymbol{T}_{i}}, \boldsymbol{0}_{2 \times 6}, \ldots \boldsymbol{0}_{2 \times 3}, \ldots \boldsymbol{0}_{2 \times 3}, \frac{\partial \boldsymbol{e}_{i j}}{\partial \boldsymbol{p}_{j}}, \boldsymbol{0}_{2 \times 3}, \ldots \boldsymbol{0}_{2 \times 3}\right)
+$$
+
+其中 $\mathbf{0}_{2 \times 6}$ 表示维度为 $2×6$ 的 $\mathbf 0$ 矩阵，同理，$\mathbf{0}_{2 \times 3}$ 也是一样的。
+该误差项对相机姿态的偏导 $\partial \boldsymbol{e}_{i j}/\partial \boldsymbol \xi_i$ 维度为 $2×6$，对路标点的偏导 $\partial \boldsymbol{e}_{i j}/\partial \boldsymbol p_i$ 维度是 $2×3$。
+这个误差项的雅可比矩阵，除了这两处为非零块，其余地方都为零。
+这体现了该误差项与其他路标和轨迹无关的特性。
+从图优化角度来说，这条观测边只和两个顶点有关。
+以下图为例，设 $\boldsymbol J_{ij}$ 只在 $i,j$ 处有非零块，那么它对 $\boldsymbol H$ 的贡献为 $\boldsymbol J^T_{ij}\boldsymbol J_{ij}$，具有图上所画的稀疏形式。
+![alt text](image-9.png) 
+对R进行一次扰动$\triangle{R}$，假设左扰动$\triangle{R}$对应的李代数为
+$$
+\begin{aligned}
+\frac{\partial ({\boldsymbol Rp})}{\partial {\boldsymbol \varphi}}
+&= \lim_{\boldsymbol \varphi \to 0}
+\frac{ \overbrace{ \exp ({\boldsymbol \varphi}^{\land})
+}^{\color{Red}{可作泰勒展开}} \exp ({\boldsymbol \phi}^{\land})
+{\boldsymbol p} - \exp ({\boldsymbol \phi}^{\land}) {\boldsymbol p}}
+{ {\boldsymbol \varphi} }\\
+&\approx \lim_{\boldsymbol \varphi \to 0}
+\frac{({\boldsymbol I} + {\boldsymbol \varphi}^{\land}) \exp
+({\boldsymbol \phi}^{\land}) {\boldsymbol p} - \exp ({\boldsymbol
+\phi}^{\land}) {\boldsymbol p}}
+{ {\boldsymbol \varphi} }  \\
+&= \lim_{\boldsymbol \varphi \to 0}
+\frac{ {\boldsymbol \varphi}^{\land} {\boldsymbol {Rp}} }
+{ {\boldsymbol \varphi} }  \\
+&= \lim_{\boldsymbol \varphi \to 0}
+\frac{ -({\boldsymbol {Rp}})^{\land} {\boldsymbol \varphi} }
+{ {\boldsymbol \varphi} } \\
+&= -({\boldsymbol {Rp}})^{\land}
+\end{aligned}
+$$   
+假设空间点p经过一次变换T（对应的李代数为$\xi$）后变为 Tp。当给左乘一个扰动$\Delta {\boldsymbol
+T} = \exp (\delta {\boldsymbol
+\xi}^{\land})$，设扰动项的李代数为$\delta {\boldsymbol \xi} = [\delta {\boldsymbol
+\rho}, \delta {\boldsymbol \phi}]^{T}$，有
+$$
+\begin{aligned}
+\frac{\partial ({\boldsymbol {Tp}})}{\partial \delta{\boldsymbol \xi}}
+&= \lim_{\delta{\boldsymbol \xi} \to 0}
+\frac{ \overbrace{ \exp (\delta {\boldsymbol \xi}^{\land})
+}^{\color{Red}{可作泰勒展开}}  \exp ({\boldsymbol \xi}^{\land})
+{\boldsymbol p} - \exp ({\boldsymbol \xi}^{\land}) {\boldsymbol p}}
+{ \delta {\boldsymbol \xi} } \\
+&\approx \lim_{\delta{\boldsymbol \xi} \to 0}
+\frac{ ({\boldsymbol I} + \delta {\boldsymbol \xi}^{\land}) \exp
+({\boldsymbol \xi}^{\land}) {\boldsymbol p} - \exp ({\boldsymbol
+\xi}^{\land}) {\boldsymbol p} }
+{ \delta {\boldsymbol \xi} } \\
+&= \lim_{\delta{\boldsymbol \xi} \to 0}
+\frac{  \delta {\boldsymbol \xi}^{\land} \exp ({\boldsymbol
+\xi}^{\land}) {\boldsymbol p}  }
+{ \delta {\boldsymbol \xi} } \\
+&= \lim_{\delta{\boldsymbol \xi} \to 0}
+\frac{
+\begin{bmatrix}
+\delta {\boldsymbol \phi}^{\land}  &   \delta {\boldsymbol
+\rho}     \\
+     {\boldsymbol
+0}^{T}                 &                      1                           \\
+\end{bmatrix}
+\begin{bmatrix}
+   {\boldsymbol {Rp}} +  {\boldsymbol t}     \\
+                                     1                                \\
+\end{bmatrix}
+}
+{ \delta {\boldsymbol \xi} } \\
+&= \lim_{\delta{\boldsymbol \xi} \to 0}
+\frac{
+\begin{bmatrix}
+   \delta {\boldsymbol \phi}^{\land} ({\boldsymbol {Rp}} + {\boldsymbol
+t}) + \delta {\boldsymbol \rho}     \\
+                                     0                                \\
+\end{bmatrix}
+}
+{ \delta {\boldsymbol \xi} } \\
+&=
+\overbrace{
+\begin{bmatrix}
+{\boldsymbol I}            &   -({\boldsymbol {Rp}} + {\boldsymbol
+t})^{\land}    \\
+{\boldsymbol 0}^{T}    &     {\boldsymbol 0}^{T}             \\
+\end{bmatrix}
+}^{\color{Red}{上式分块求导}}\\
+&= ({\boldsymbol {Tp}})^{\bigodot}
+\end{aligned}
+$$   
+上式中运算符号的含义$\bigodot$：将一个齐次坐标的空间点变换成一个4*6的矩阵。   
+![alt text](image-8.png)       
+![alt text](image-17.png)   
+当某个误差项 $\boldsymbol J$ 具有稀疏性时，它对 $\boldsymbol H$ 的贡献也具有稀疏形式。
+这个 $\boldsymbol J^T_{ij}\boldsymbol J_{ij}$ 矩阵也仅有4个非零块，位于 $(i,i),(i,j),(j,i),(j,j)$。
+对于整体的 $\boldsymbol H$，有：
+
+$$
+\boldsymbol{H}=\sum_{i, j} \boldsymbol{J}_{i j}^{\mathrm{T}} \boldsymbol{J}_{i j}
+$$
+
+$i$ 在所有相机位姿中取值，$j$ 在所有路标点中取值。把 $\boldsymbol H$ 进行分块：
+
+$$
+\boldsymbol{H}=\left[\begin{array}{ll}
+\boldsymbol{H}_{11} & \boldsymbol{H}_{12} \\
+\boldsymbol{H}_{21} & \boldsymbol{H}_{22}
+\end{array}\right]
+$$
+
+这里，$\boldsymbol H_{11}$ 只和相机位姿有关，而 $\boldsymbol H_{22}$ 只和路标点有关。
+当遍历 $i,j$ 时，以下事实总是成立的：
+
+不管 $i,j$ 怎么变，$\boldsymbol H_{11}$ 都是对角阵，只在 $\boldsymbol H_{i,i}$ 处有非零块。
+同理，$\boldsymbol H_{22}$ 也是对角阵，只在 $\boldsymbol H_{j,j}$ 处有非零块。
+对于 $\boldsymbol H_{12}$ 和 $\boldsymbol H_{21}$，它们可能是稀疏的，也可能是稠密的，视具体的观测数据而定。
+
+这显示了 $\boldsymbol H$ 的稀疏结构。
+举一个实例来直观地说明它的情况。
+假设一个场景内有 $2$ 个相机位姿 $(\boldsymbol C_1,\boldsymbol C_2)$ 和 $6$ 个路标点 $(\boldsymbol P_1 ,\boldsymbol P_2, \boldsymbol P_3, \boldsymbol P_4, \boldsymbol P_5,\boldsymbol P_6)$。
+这些相机和点云所对应的变量为 $\boldsymbol T_i,i= 1,2$ 及 $\boldsymbol p_j,j= 1,\cdots,6$。
+相机 $\boldsymbol C_1$ 观测到路标点 $\boldsymbol P_1 ,\boldsymbol P_2, \boldsymbol P_3, \boldsymbol P_4$，相机 $\boldsymbol C_2$ 观测到路标点 $\boldsymbol P_3, \boldsymbol P_4, \boldsymbol P_5,\boldsymbol P_6$。
+把这个过程画成示意图，如下图所示。相机和路标以圆形节点表示。如果 $i$ 相机能够观测到 $j$ 点，就在它们对应的节点连上一条边。    
+![alt text](image-10.png)    
+可以推出，场景下的BA目标函数应为：
+
+$$
+\frac{1}{2}\left(\left\|\boldsymbol e_{11}\right\|^{2}+\left\|\boldsymbol e_{12}\right\|^{2}+\left\|\boldsymbol e_{13}\right\|^{2}+\left\|\boldsymbol e_{14}\right\|^{2}+\left\|\boldsymbol e_{23}\right\|^{2}+\left\|\boldsymbol e_{24}\right\|^{2}+\left\|\boldsymbol e_{25}\right\|^{2}+\left\|\boldsymbol e_{26}\right\|^{2}\right)
+$$
+
+这里的 $\boldsymbol e_{i,j}$ 使用之前定义过的代价函数，即式 $\frac{1}{2} \sum_{i=1}^{m} \sum_{j=1}^{n}\left\|\boldsymbol{e}_{i j}\right\|^{2}=\frac{1}{2} \sum_{i=1}^{m} \sum_{j=1}^{n}\left\|\boldsymbol{z}_{i j}-h\left(\boldsymbol{T}_{i}, \boldsymbol{p}_{j}\right)\right\|^{2}$
+以 $\boldsymbol e_{11}$ 为例，它描述了在 $\boldsymbol C_1$ 看到了 $\boldsymbol P_1$ 这件事，与其他的相机位姿和路标无关。
+令 $\boldsymbol J_{11}$ 为 $\boldsymbol e_{11}$ 所对应的雅可比矩阵，不难看出 $\boldsymbol e_{11}$ 对相机变量 $\boldsymbol \xi_2$ 和路标点 $\boldsymbol p_2,\cdots,\boldsymbol p_6$ 的偏导都为 $0$。
+把所有变量以 $\boldsymbol x=(\boldsymbol \xi_1,\boldsymbol \xi_2,\boldsymbol p_1,\cdots,\boldsymbol p_6)^T$ 的顺序摆放，则有：
+
+$$
+\boldsymbol{J}_{11}=\frac{\partial \boldsymbol{e}_{11}}{\partial \boldsymbol{x}}=\left(\frac{\partial \boldsymbol{e}_{11}}{\partial \boldsymbol{\xi}_{1}}, \mathbf{0}_{2 \times 6}, \frac{\partial \boldsymbol{e}_{11}}{\partial \boldsymbol{p}_{1}}, \mathbf{0}_{2 \times 3}, \mathbf{0}_{2 \times 3}, \mathbf{0}_{2 \times 3}, \mathbf{0}_{2 \times 3}, \mathbf{0}_{2 \times 3}\right)
+$$
+
+为了方便表示稀疏性，用带有颜色的方块表示矩阵在该方块内有数值，其余没有颜色的区域表示矩阵在该处数值都为 $0$。那么上面的 $\boldsymbol{J}_{11}$ 则可以表示成下图所示的图案。同理，其他的雅可比矩阵也会有类似的稀疏图案。    
+![alt text](image-11.png)      
+$\boldsymbol{J}_{11}$ 矩阵的非零块分布图。上方的标记表示矩阵该列所对应的变量。由于相机参数维数比点云参数维数大，所以 $\boldsymbol C_1$ 对应的矩阵块要比 $\boldsymbol P_1$ 对应的矩阵块宽。
+为了得到该目标函数对应的雅可比矩阵，将这些 $\boldsymbol{J}_{ij}$ 按照一定顺序列为向量，那么整体雅可比矩阵及相应的 $\boldsymbol H$ 矩阵的稀疏情况就如下图所示。     
+![alt text](image-12.png)   
+现在考虑更一般的情况，假如有 $m$ 个相机位姿，$n$ 个路标点。
+由于通常路标的数量远远多于相机，于是有 $n\gg m$。
+由上面的推理可知，一般情况下的 $\boldsymbol H$ 矩阵如下图所示。它的左上角块显得非常小，而右下角的对角块占据了大量地方。
+![alt text](image-13.png)
+除此之外，非对角部分则分布着散乱的观测数据。由于它的形状很像箭头，又称为箭头形（Arrow-like）矩阵。
+对于具有这种稀疏结构的 $\boldsymbol H$，线性方程 $\boldsymbol{H} \Delta \boldsymbol{x}=\boldsymbol{g}$ 的求解在现实当中存在着若干种利用 $\boldsymbol H$ 的稀疏性加速计算的方法。
+本节介绍视觉SLAM里一种最常用的手段：Schur 消元。在SLAM研究中也称为Marginalization（边缘化）。
+仔细观察上图，发现这个矩阵可以分成 $4$ 个块，和式 $\boldsymbol{H}=\left[\begin{array}{ll}
+\boldsymbol{H}_{11} & \boldsymbol{H}_{12} \\
+\boldsymbol{H}_{21} & \boldsymbol{H}_{22}
+\end{array}\right]$ 一致。
+左上角为对角块矩阵，每个对角块元素的维度与相机位姿的维度相同，且是一个对角块矩阵。
+右下角也是对角块矩阵，每个对角块的维度是路标的维度。
+非对角块的结构与具体观测数据相关。
+首先将这个矩阵按照下图所示的方式做区域划分，这4个区域正好对应了公式 $\boldsymbol{H}=\boldsymbol{J}^{\mathrm{T}} \boldsymbol{J}=\left[\begin{array}{ll}
+\boldsymbol{F}^{\mathrm{T}} \boldsymbol{F} & \boldsymbol{F}^{\mathrm{T}} \boldsymbol{E} \\
+\boldsymbol{E}^{\mathrm{T}} \boldsymbol{F} & \boldsymbol{E}^{\mathrm{T}} \boldsymbol{E}
+\end{array}\right]$ 中的 $4$ 个矩阵块。
+![alt text](image-14.png)
+为了后续分析方便，记这 $4$ 个块为 $\boldsymbol B,\boldsymbol E, \boldsymbol E^T ,\boldsymbol C$。
+于是，对应的线性方程组也可以由 $\boldsymbol{H} \Delta \boldsymbol{x}=\boldsymbol{g}$ 变为如下形式：
+
+$$
+\left[\begin{array}{ll}
+\boldsymbol{B} & \boldsymbol{E} \\
+\boldsymbol{E}^{\mathrm{T}} & \boldsymbol{C}
+\end{array}\right]\left[\begin{array}{l}
+\Delta \boldsymbol{x}_{\mathrm{c}} \\
+\Delta \boldsymbol{x}_{p}
+\end{array}\right]=\left[\begin{array}{l}
+\boldsymbol{v} \\
+\boldsymbol{w}
+\end{array}\right]
+$$
+
+其中 $\boldsymbol B$ 是对角块矩阵，每个对角块的维度和相机参数的维度相同，对角块的个数是相机变量的个数。
+由于路标数量会远远大于相机变量个数，所以 $\boldsymbol C$ 往往也远大于 $\boldsymbol B$。
+三维空间中每个路标点为三维，于是 $\boldsymbol C$ 矩阵为对角块矩阵，每个块为 $3×3$ 矩阵。
+对角块矩阵求逆的难度远小于对一般矩阵的求逆难度，因为只需要对那些对角线矩阵块分别求逆即可。
+考虑到这个特性，对线性方程组进行高斯消元，目标是消去右上角的非对角部分 $\boldsymbol E$，得：
+
+$$
+\left[\begin{array}{cc}
+\boldsymbol{I} & -\boldsymbol{E} \boldsymbol{C}^{-1} \\
+\mathbf 0 & \boldsymbol{I}
+\end{array}\right]\left[\begin{array}{cc}
+\boldsymbol{B} & \boldsymbol{E} \\
+\boldsymbol{E}^{\mathrm{T}} & \boldsymbol C
+\end{array}\right]\left[\begin{array}{l}
+\Delta \boldsymbol{x}_{\mathrm{c}} \\
+\Delta \boldsymbol{x}_{p}
+\end{array}\right]=\left[\begin{array}{cc}
+\boldsymbol{I} & -\boldsymbol{E} \boldsymbol{C}^{-1} \\
+\mathbf{0} & \boldsymbol{I}
+\end{array}\right]\left[\begin{array}{l}
+\boldsymbol{v} \\
+\boldsymbol{w}
+\end{array}\right]
+$$
+
+整理得：
+
+$$
+\left[\begin{array}{cc}
+\boldsymbol{B}-\boldsymbol{E} \boldsymbol{C}^{-1} \boldsymbol{E}^{\mathrm{T}} & \mathbf 0 \\
+\boldsymbol{E}^{\mathrm{T}} & \boldsymbol C
+\end{array}\right]\left[\begin{array}{l}
+\Delta \boldsymbol{x}_{\mathrm{c}} \\
+\Delta \boldsymbol{x}_{p}
+\end{array}\right]=\left[\begin{array}{c}
+\boldsymbol{v}-\boldsymbol{E} \boldsymbol{C}^{-1} \boldsymbol{w} \\
+\boldsymbol{w}
+\end{array}\right]
+$$
+
+消元之后，方程组第一行变成和 $\Delta \boldsymbol{x}_p$ 无关的项。
+单独把它拿出来，得到关于位姿部分的增量方程：
+
+$$
+\left[\boldsymbol{B}-\boldsymbol{E} \boldsymbol{C}^{-1} \boldsymbol{E}^{T}\right] \Delta \boldsymbol{x}_{\mathrm{c}}=\boldsymbol{v}-\boldsymbol{E} \boldsymbol{C}^{-1} \boldsymbol{w}
+$$
+
+这个线性方程的维度和 $\boldsymbol B$ 矩阵一样。
+先求解这个方程，然后把解得的 $\Delta \boldsymbol{x}_c$ 代入原方程，求解 $\Delta \boldsymbol{x}_p$
+这个过程称为 Marginalization，或者 Schur 消元（Schur Elimination）
+相比于直接解线性方程的做法、它的优势在于：
+
+在消元过程中，由于 $\boldsymbol C$ 为对角块，所以 $\boldsymbol C^{-1}$ 容易解出
+求解了 $\Delta \boldsymbol{x}_c$ 之后，路标部分的增量方程由 $\Delta \boldsymbol{x}_{p}=\boldsymbol{C}^{-1}\left(\boldsymbol{w}-\boldsymbol{E}^{\mathrm{T}} \Delta \boldsymbol{x}_{\mathrm{c}}\right)$ 给出。这依然用到了 $\boldsymbol C^{-1}$ 易于求解的特性。
+
+于是，边缘化的主要计算量在于求解式 $\left[\boldsymbol{B}-\boldsymbol{E} \boldsymbol{C}^{-1} \boldsymbol{E}^{T}\right] \Delta \boldsymbol{x}_{\mathrm{c}}=\boldsymbol{v}-\boldsymbol{E} \boldsymbol{C}^{-1} \boldsymbol{w}$
+将此方程的系数记为 $\boldsymbol S$，它的稀疏性式不规则的，下图显示了对 $\boldsymbol H$ 矩阵进行 Schur 消元后的一个 $\boldsymbol S$ 实例。
+![alt text](image-15.png)
+$\boldsymbol H$ 矩阵的非对角块处的非零元素对应着相机和路标的关联。
+进行了 Schur 消元后 $\boldsymbol S$ 的稀疏性也具有物理意义：$\boldsymbol S$ 矩阵的非对角线上的非零矩阵块，表示了该处对应的两个相机变量之间存在着共同观测的路标点，有时称为共视（Co-visibility）。
+反之，如果该块为零，则表示这两个相机没有共同观测。
+于是，$\boldsymbol S$ 矩阵的稀疏性结构当取决于实际观测的结果，无法提前预知。
+在实践中，例如 ORB-SLAM 中的 Local Mapping 环节，在做BA的时候刻意选择那些具有共同观测的帧作为关键帧，在这种情况下，Schur 消元后得到的 $\boldsymbol S$ 就是稠密矩阵。
+不过，由于这个模块并不是实时执行，所以这种做法也是可以接受的。
+但是有另一些方法，例如 DSO、OKVIS 等，它们采用了滑动窗口（Sliding Window）方法。这类方法对每一帧都要求做一次BA来防止误差的累积，因此它们也必须采用一些技巧来保持 $\boldsymbol S$ 矩阵的稀疏性。
+从概率角度来看，称这一步为边缘化，是因为实际上把求 $(\Delta \boldsymbol x_c,\Delta \boldsymbol x_p)$ 的问题，转化成了先固定 $\Delta \boldsymbol x_p$，求出 $\Delta \boldsymbol x_c$，再求 $\Delta \boldsymbol x_p$ 的过程。这一步相当于做了条件概率展开：
+
+$$
+P\left(\boldsymbol{x}_{\mathrm{c}}, \boldsymbol{x}_{p}\right)=P\left(\boldsymbol{x}_{\mathrm{c}} \mid \boldsymbol{x}_{p}\right) P\left(\boldsymbol{x}_{p}\right),
+$$
+
+结果是求出了关于 $\boldsymbol x_p$ 的边缘分布，故称边缘化。
+在前面介绍的边缘化过程中，实际上把所有的路标点都给边缘化了。
+根据实际情况，也能选择一部分进行边缘化。
+同时，Schur 消元只是实现边缘化的其中一种方式，同样可以使用 Cholesky 分解进行边缘化。
+#### 鲁棒核函数
+在前面的BA问题中，将最小化误差项的二范数平方和作为目标函数。
+这种做法虽然很直观，但存在一个严重的问题：如果出于误匹配等原因，某个误差项给的数据是错误的，会发生什么呢？
+我们把一条原本不应该加到图中的边给加进去了，然而优化算法并不能辨别出这是个错误数据，它会把所有的数据都当作误差来处理。
+在算法看来，这相当于突然观测到了一次很不可能产生的数据。这时，在图优化中会有一条误差很大的边，它的梯度也很大，意味着调整与它相关的变量会使目标函数下降更多。
+所以，算法将试图优先调整这条边所连接的节点的估计值，使它们顺应这条边的无理要求。
+由于这条边的误差真的很大，往往会抹平其他正确边的影响，使优化算法专注于调整一个错误的值。
+这显然不是我们希望看到的。
+出现这种问题的原因是，当误差很大时，二范数增长得太快。
+于是就有了核函数的存在。核函数保证每条边的误差不会大得没边而掩盖其他的边。
+具体的方式是，把原先误差的二范数度量替换成一个增长没有那么快的函数，同时保证自己的光滑性质（不然无法求导）。因为它们使得整个优化结果更为稳健，所以又叫它们鲁棒核函数（Robust Kernel）。
+鲁棒核函数有许多种，例如最常用的 Huber 核：
+
+$$
+H(e)=\left\{\begin{array}{ll}
+\frac{1}{2} e^{2} & \text { 当 }|e| \leqslant \delta, \\
+\delta\left(|e|-\frac{1}{2} \delta\right) & \text { 其他 }
+\end{array}\right.
+$$
+
+当误差 $e$ 大于某个阈值 $\delta$ 后，函数增长由二次形式变成了一次形式，相当于限制了梯度的最大值。
+同时，Huber 核函数又是光滑的，可以很方便地求导。
+下图显示了 Huber 核函数与二次函数的对比，可见在误差较大时 Huber 核函数增长明显低于二次函数。
+![alt text](image-16.png)
+除了 Huber 核，还有 Cauchy 核、Tukey 核，等等，g2o和Ceres都提供了一些核函数。
+实践中，多数软件库已经实现了细节操作，而需要做的主要是构造BA问题，设置 Schur 消元，然后调用稠密或者稀疏矩阵求解器对变量进行优化。
