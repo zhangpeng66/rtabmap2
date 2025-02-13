@@ -6,3 +6,6 @@
 	path = rtabmap_ros
 	url = https://github.com/introlab/rtabmap_ros.git
 	branch = humble-devel
+[submodule "ORB_SLAM3"]
+	path = ORB_SLAM3
+	url = https://github.com/UZ-SLAMLab/ORB_SLAM3.git
