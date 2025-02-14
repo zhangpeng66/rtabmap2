@@ -1,6 +1,6 @@
 # <center>orbslam notebook </center>
 
-![alt text](image-4.png)
+![alt text](./orbslam_images/image-4.png)
 
 ## 矩阵的性质
 
@@ -112,7 +112,7 @@ $\boldsymbol{F} = \boldsymbol{K}^{-T}[\boldsymbol{t}]_{\times}\boldsymbol{R}\bol
 由于等式右侧是0，所以上面两式子乘以任意常数以后还是表示同样两点之间的变换，所以E是尺度等价的。 
 由于尺度等价性，所以对于9个参数的向量e，我们只需要通过8个方程计算出其中8个未知数即可， 8个数都用第9个数表示，由于尺度等价，所以第9个数取什么值都是对的。 
 单目相机的初始化往往由对极几何约束完成。对极几何约束应用的场景是已知两幅图像之间若干匹配点，求解两幅图像之间的相机运动，是一个2D-2D的问题。详细的推导过程可以参考《视觉SLAM14讲》中的过程，其核心求解是一个本质矩阵E（或者带有内参矩阵的基础矩阵），本质矩阵E的特点是具有尺度等价性。位姿R和t是由E通过奇异值分解得到的，其中R是正交矩阵，其逆等于自身的转置，相当于自身的约束可以克服掉尺度等价性；但是t没有办法克服尺度等价性，即这个t乘上任意一个非零的正数，都能满足对极几何约束。   
-![alt text](image-6.png)
+![alt text](./orbslam_images/image-6.png)
 对极几何约束的几何意义是$O_L,O_R,X$三点共面，纯旋转情况下$O_L,O_R$共点，t为0，本质矩阵也为0,无法分解出R。通常的初始化做法是，将t归一化，让其长度等于1，并作为单位计算相机的运动和图像特征点对应的3D点位置。初始化之后，便可以利用3D-2D的PnP方法，求解后续相邻帧的运动位姿。至于这个长度1对应到真实世界中的长度可能是5cm,也可能是40m，这就需要额外的深度信息介入进行确定，这个以t的长度作为单位的尺度世界只和真实世界之间相差一个尺度因子。
 
 **四：为什么基础矩阵自由度是7？** 
@@ -378,10 +378,10 @@ $X_2 = RX_1 + T\frac{1}{d}N^TX_1=(R+T\frac{1}{d}N^T)X_1=H'X_1$
 所以就得到了同一平面两个不同相机坐标系的单应矩阵
 $H' = R+T\frac{1}{d}N^T$
 ![alt text](./orbslam_images/image_zero.png)    
-![alt text](image.png)    
-![alt text](image-1.png)   
-![alt text](image-2.png)   
-![alt text](image-3.png)   
+![alt text](./orbslam_images/image.png)    
+![alt text](./orbslam_images/image-1.png)   
+![alt text](./orbslam_images/image-2.png)   
+![alt text](./orbslam_images/image-3.png)   
 ORB-SLAM2 只处理 $d_1>d_2>d_3$ 的情况，根据$d', \varepsilon_1, \varepsilon_3$的符号一共有 8 种不同的解。 下面我们详细分析函数 ReconstructH，了解具体的实现过程。  
 ## **三角测量原理**    
 函数的定义在[GeometricTools::Triangulate()](../ORB_SLAM3/src/GeometricTools.cc)，在检查R和t的时候用到**TwoViewReconstruction::CheckRT**，现在假设相机的内参矩阵为K，根据单应矩阵或者基础矩阵估计出相机的旋转矩阵R和平移向量t。那么对于空间中一点$\boldsymbol{X} = \begin{bmatrix} x & y & z \end{bmatrix}^T$， 其在相机中的成像点$\boldsymbol{x} = \begin{bmatrix} u & v & 1 \end{bmatrix}^T$ 。那么我们可以写出3D坐标到2D像素之间的投影关系：   
@@ -433,7 +433,7 @@ $$
 PnP 问题(Perspective-n-Point Problem)是，已知相机内参矩阵K和 n 个 3D 空间点${c_1,c_2,⋯,c_n}$及其到图像上 2D 的投影点${μ_1,μ_2,⋯,μ_n}$，求解相机的位置和姿态。记第 i 个 3D 空间点的齐次坐标为 $\boldsymbol{c_i} = \begin{bmatrix} x_i & y_i & z_i & 1\end{bmatrix}^T$，其在图像上投影的 2D 像素坐标为 $\boldsymbol{\mu_i} = \begin{bmatrix} u_i & v_i & 1 \end{bmatrix}^T$。 其投影过程，可以分解为两步：    
 1. 根据相机的位姿，将空间点从世界坐标系下变换到相机坐标系下。
 2. 将相机坐标系下的点，根据相机内参矩阵，投影到图像上。     
-![alt text](image-5.png)  
+![alt text](./orbslam_images/image-5.png)  
 其整个过程相当于连续乘了两个矩阵：   
 $$
 s \begin{bmatrix} u_i \\ v_i \\ 1 \end{bmatrix} = \boldsymbol{K} \left[ \boldsymbol{R} \big | \boldsymbol{t} \right]
@@ -487,8 +487,8 @@ $$
 跟踪使用运动模型的**Tracking::TrackWithMotionModel()**，使用上一帧mLastFrame的3D点云来pnp求解[matcher.SearchByProjection(mCurrentFrame,mLastFrame](../ORB_SLAM3/src/ORBmatcher.cc);跟踪参考关键帧的**Tracking::TrackReferenceKeyFrame()**，使用最近的参考关键帧的3D点云来pnp求解[matcher.SearchByBoW(mpReferenceKF,mCurrentFrame](../ORB_SLAM3/src/ORBmatcher.cc);重定位**Tracking::Relocalization()**，使用历史上每一个关键帧pKF的3D点云pnp求解[matcher.SearchByBoW(pKF,mCurrentFrame](../ORB_SLAM3/src/ORBmatcher.cc);最后一个是跟踪局部地图**Tracking::TrackLocalMap()**，使用局部地图的3D点云来求解pnp[matcher.SearchByProjection(mCurrentFrame, mvpLocalMapPoints](../ORB_SLAM3/src/ORBmatcher.cc)。   
 ## 重投影误差与BA优化函数  
 ### 重投影误差 
-BA(Bundle Adjustment)，又称光束法平差（平差就是抹平误差）。BA的本质是一个优化模型，其目的是最小化重投影误差，所谓重投影误差就是二次投影与一次投影之间产生的误差。
-![alt text](image-7.png)   
+BA(Bundle Adjustment)，又称光束法平差（平差就是抹平误差）。BA的本质是一个优化模型，其目的是最小化重投影误差，所谓重投影误差就是二次投影与一次投影之间产生的误差。实际函数定义在[Optimizer::BundleAdjustment()](../ORB_SLAM3/src/Optimizer.cc)。
+![alt text](./orbslam_images/image-7.png)   
 第一次投影指的就是相机在拍照的时候三维空间点投影到图像上第一次投影在相机平面产生了特征点$p_1$，我们可以计算出P的坐标位置。之后相机进行了运动，通过一些方法我们得到这个运动的数值，进而得到了它的位姿。由于我们现在知道相机的位姿（计算估计得来）和P的世界坐标，因此可以计算P在第二幅图下的投影，这就是所谓的第二次投影。此时在相机平面产生了特征点$p_2$，而通过特征匹配我们能够知道特征点$\hat{p}_2$的真实位置，两者会产生误差，这就是所谓的重投影误差。换句话说，重投影误差是指的真实三维空间点在图像平面上的投影（也就是图像上的像素点）和重投影（其实是用我们的计算值得到的虚拟的像素点）的差值。    
 给定N个两张图中完成匹配的点，记作：  
 ${z_1} = \left\{ {z_1^1,z_1^2, \ldots ,z_1^N} \right\},{z_2} = \left\{ {z_2^1,z_2^2, \ldots ,z_2^N} \right\}$   
@@ -537,7 +537,7 @@ $$
 这体现了该误差项与其他路标和轨迹无关的特性。
 从图优化角度来说，这条观测边只和两个顶点有关。
 以下图为例，设 $\boldsymbol J_{ij}$ 只在 $i,j$ 处有非零块，那么它对 $\boldsymbol H$ 的贡献为 $\boldsymbol J^T_{ij}\boldsymbol J_{ij}$，具有图上所画的稀疏形式。
-![alt text](image-9.png) 
+![alt text](./orbslam_images/image-9.png) 
 对R进行一次扰动$\triangle{R}$，假设左扰动$\triangle{R}$对应的李代数为
 $$
 \begin{aligned}
@@ -617,8 +617,8 @@ t})^{\land}    \\
 \end{aligned}
 $$   
 上式中运算符号的含义$\bigodot$：将一个齐次坐标的空间点变换成一个4*6的矩阵。   
-![alt text](image-8.png)       
-![alt text](image-17.png)   
+![alt text](./orbslam_images/image-8.png)       
+![alt text](./orbslam_images/image-17.png)   
 当某个误差项 $\boldsymbol J$ 具有稀疏性时，它对 $\boldsymbol H$ 的贡献也具有稀疏形式。
 这个 $\boldsymbol J^T_{ij}\boldsymbol J_{ij}$ 矩阵也仅有4个非零块，位于 $(i,i),(i,j),(j,i),(j,j)$。
 对于整体的 $\boldsymbol H$，有：
@@ -649,7 +649,7 @@ $$
 这些相机和点云所对应的变量为 $\boldsymbol T_i,i= 1,2$ 及 $\boldsymbol p_j,j= 1,\cdots,6$。
 相机 $\boldsymbol C_1$ 观测到路标点 $\boldsymbol P_1 ,\boldsymbol P_2, \boldsymbol P_3, \boldsymbol P_4$，相机 $\boldsymbol C_2$ 观测到路标点 $\boldsymbol P_3, \boldsymbol P_4, \boldsymbol P_5,\boldsymbol P_6$。
 把这个过程画成示意图，如下图所示。相机和路标以圆形节点表示。如果 $i$ 相机能够观测到 $j$ 点，就在它们对应的节点连上一条边。    
-![alt text](image-10.png)    
+![alt text](./orbslam_images/image-10.png)    
 可以推出，场景下的BA目标函数应为：
 
 $$
@@ -666,14 +666,14 @@ $$
 $$
 
 为了方便表示稀疏性，用带有颜色的方块表示矩阵在该方块内有数值，其余没有颜色的区域表示矩阵在该处数值都为 $0$。那么上面的 $\boldsymbol{J}_{11}$ 则可以表示成下图所示的图案。同理，其他的雅可比矩阵也会有类似的稀疏图案。    
-![alt text](image-11.png)      
+![alt text](./orbslam_images/image-11.png)      
 $\boldsymbol{J}_{11}$ 矩阵的非零块分布图。上方的标记表示矩阵该列所对应的变量。由于相机参数维数比点云参数维数大，所以 $\boldsymbol C_1$ 对应的矩阵块要比 $\boldsymbol P_1$ 对应的矩阵块宽。
 为了得到该目标函数对应的雅可比矩阵，将这些 $\boldsymbol{J}_{ij}$ 按照一定顺序列为向量，那么整体雅可比矩阵及相应的 $\boldsymbol H$ 矩阵的稀疏情况就如下图所示。     
-![alt text](image-12.png)   
+![alt text](./orbslam_images/image-12.png)   
 现在考虑更一般的情况，假如有 $m$ 个相机位姿，$n$ 个路标点。
 由于通常路标的数量远远多于相机，于是有 $n\gg m$。
 由上面的推理可知，一般情况下的 $\boldsymbol H$ 矩阵如下图所示。它的左上角块显得非常小，而右下角的对角块占据了大量地方。
-![alt text](image-13.png)
+![alt text](./orbslam_images/image-13.png)
 除此之外，非对角部分则分布着散乱的观测数据。由于它的形状很像箭头，又称为箭头形（Arrow-like）矩阵。
 对于具有这种稀疏结构的 $\boldsymbol H$，线性方程 $\boldsymbol{H} \Delta \boldsymbol{x}=\boldsymbol{g}$ 的求解在现实当中存在着若干种利用 $\boldsymbol H$ 的稀疏性加速计算的方法。
 本节介绍视觉SLAM里一种最常用的手段：Schur 消元。在SLAM研究中也称为Marginalization（边缘化）。
@@ -688,7 +688,7 @@ $\boldsymbol{J}_{11}$ 矩阵的非零块分布图。上方的标记表示矩阵�
 \boldsymbol{F}^{\mathrm{T}} \boldsymbol{F} & \boldsymbol{F}^{\mathrm{T}} \boldsymbol{E} \\
 \boldsymbol{E}^{\mathrm{T}} \boldsymbol{F} & \boldsymbol{E}^{\mathrm{T}} \boldsymbol{E}
 \end{array}\right]$ 中的 $4$ 个矩阵块。
-![alt text](image-14.png)
+![alt text](./orbslam_images/image-14.png)
 为了后续分析方便，记这 $4$ 个块为 $\boldsymbol B,\boldsymbol E, \boldsymbol E^T ,\boldsymbol C$。
 于是，对应的线性方程组也可以由 $\boldsymbol{H} \Delta \boldsymbol{x}=\boldsymbol{g}$ 变为如下形式：
 
@@ -762,7 +762,7 @@ $$
 
 于是，边缘化的主要计算量在于求解式 $\left[\boldsymbol{B}-\boldsymbol{E} \boldsymbol{C}^{-1} \boldsymbol{E}^{T}\right] \Delta \boldsymbol{x}_{\mathrm{c}}=\boldsymbol{v}-\boldsymbol{E} \boldsymbol{C}^{-1} \boldsymbol{w}$
 将此方程的系数记为 $\boldsymbol S$，它的稀疏性式不规则的，下图显示了对 $\boldsymbol H$ 矩阵进行 Schur 消元后的一个 $\boldsymbol S$ 实例。
-![alt text](image-15.png)
+![alt text](./orbslam_images/image-15.png)
 $\boldsymbol H$ 矩阵的非对角块处的非零元素对应着相机和路标的关联。
 进行了 Schur 消元后 $\boldsymbol S$ 的稀疏性也具有物理意义：$\boldsymbol S$ 矩阵的非对角线上的非零矩阵块，表示了该处对应的两个相机变量之间存在着共同观测的路标点，有时称为共视（Co-visibility）。
 反之，如果该块为零，则表示这两个相机没有共同观测。
@@ -803,6 +803,117 @@ $$
 当误差 $e$ 大于某个阈值 $\delta$ 后，函数增长由二次形式变成了一次形式，相当于限制了梯度的最大值。
 同时，Huber 核函数又是光滑的，可以很方便地求导。
 下图显示了 Huber 核函数与二次函数的对比，可见在误差较大时 Huber 核函数增长明显低于二次函数。
-![alt text](image-16.png)
+![alt text](./orbslam_images/image-16.png)
 除了 Huber 核，还有 Cauchy 核、Tukey 核，等等，g2o和Ceres都提供了一些核函数。
 实践中，多数软件库已经实现了细节操作，而需要做的主要是构造BA问题，设置 Schur 消元，然后调用稠密或者稀疏矩阵求解器对变量进行优化。
+#### 优化实践  
+在视觉SLAM十四讲也有具体说明基于SE3的g2o版本[pose_graph_g2o_SE3.cpp](../slambook/ch11/pose_graph_g2o_SE3.cpp)，当机器人在更大范围的时间和空间中运动时，从减小计算量的角度出发有一下解决方案：
+a 滑动窗口法，丢弃一些历史数据；
+b 位姿图，舍弃对路标点的优化，只保留相机位姿。   
+![alt text](./orbslam_images/image-18.png)  
+构造最优化问题所有的位姿顶点和位姿-位姿边构成了一个图优化，本质上是一个最小二乘问题，优化变量为各个顶点的位姿，边来自于位姿观测约束。优化方法可以选用高斯牛顿法、列文伯格-马夸尔特方法等求解。      
+位姿图优化——g2o原生位姿图实现
+3.1） 数据说明：
+位姿图数据是由g2o自带的create sphere 程序仿真生成的
+真实轨迹为一个球体，由从下往上的多个层组成
+仿真程序生成了t-1到t时刻的边，称为odometry边（里程计），此外，又生成了层与层之间的边，称为loop closure (回环)
+在每条边上添加噪声，根据里程计边的噪声，重新设置节点的初始值，这样就生成了带有累计误差的位姿图数据。
+3.2） 位姿图信息读取
+包括各个位姿点的位姿信息；（ID + 平移向量+ 四元数）
+两两位姿点之间的量测信息以及R阵信息（其中R阵是非对角线元素是一样的，所以给的是三角阵）
+3.3） 图优化问题构建
+求解器的设置，优化问题构建   
+边的类型采用g2o::EdgeSE3：
+其中需要注意边类型中：
+computeError 误差函数计算（两测的两两顶点的位姿变化和实际位姿变化的残差计算）
+linearizeOplus线性化函数实现（雅克比矩阵求解）：computeEdgeSE3Gradient函数   
+#### 高斯牛顿法   
+1.构建最小二乘问题：
+$T^{*}=argmin\frac{1}{2} \displaystyle \sum^{n}_{i=1}||u_{i}-\frac{1}{s_{i}}KTP_{i}||^{2}_{2}$  
+线性化：$e(x+\Delta x) \approx e(x) + J^{T}\Delta x$   
+高斯的增量方程为：$(\displaystyle \sum^{100}_{i=1} J_{i}(\sigma^{2})^{-1} J_{i}^{T})\Delta x_{k}=\displaystyle \sum^{100}_{i=1} -J_{i}(\sigma^{2})^{-1} e_{i}$   
+$H\Delta x_{k}=b$   
+2.求雅可比矩阵：
+1. 使用非齐次坐标，像素误差e是2维，x为相机位姿是6维，$J^T$是一个2*6的矩阵。  
+2. 将P变换到相机坐标下为$P^{'}=[X^{'},Y^{'},Z^{'}]^{T}$,则$su=KP^{'}$。   
+3. 消去s得：$v=f_{y}\frac{Y^{'}}{Z^{'}}+c_{y}$  
+4. 对T左乘扰动量$\delta \xi$，考虑e的变化关于扰动量的导数。则$\frac{\partial e}{\partial \delta \xi}= \frac{\partial e}{\partial P^{'}} \frac{\partial P^{'}}{\partial \delta \xi}$。
+5. 得出$\frac{\partial e}{\partial P^{'}}-\left[ \begin{matrix} \frac{f_{x}}{Z^{'}} & 0 & -\frac{f_{x}X^{'}}{Z^{'2}} \\ 0 & \frac{f_{y}}{Z^{'}} & -\frac{f_{y}Y^{'}}{Z^{'2}} \end{matrix} \right]$  
+6. 由李代数得出$\frac{\partial (TP)}{\partial \delta \xi} = \left[ \begin{matrix} I & -P^{' \Lambda} \\ 0^{T} & 0^{T} \end{matrix} \right]$
+7. 在$P^{'}$定义中取了前三维，所以$\frac{\partial P^{'}}{\partial \delta \xi} = \left[ \begin{matrix} I & -P^{' \Lambda} \end{matrix} \right]$
+8. 两个式子相乘就可以得到雅可比矩阵：
+$\frac{\partial e}{\partial \delta \xi} = - \left[ \begin{matrix} \frac{f_{x}}{Z^{'}} & 0 & -\frac{f_{x}X^{'}}{Z^{'2}} & -\frac{f_{x}X^{'}Y^{'}}{Z^{'2}}  & f_{x} + \frac{f_{x}X^{'2}}{Z^{'2}} &- \frac{f_{x}Y^{'}}{Z^{'}} \\  0 & \frac{f_{y}}{Z^{'}} & -\frac{f_{y}Y^{'}}{Z^{'2}} & -f_{y} - \frac{f_{y}Y^{'2}}{Z^{'2}} & \frac{f_{y}X^{'}Y^{'}}{Z^{'2}} & \frac{f_{y}X^{'}}{Z^{'}} \end{matrix} \right]$
+```C++ 
+//G-N法求解PnP问题
+void solvePnPByGN(const vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &ps3d, 
+const vector<Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d>> &ps2d, 
+const Mat &k,
+Sophus::SE3d &pose)
+{
+    const int iterations = 10;	//迭代次数
+    double cost = 0, lastCost = 0;	//目标函数
+    double fx = k.at<double>(0, 0);
+    double cx = k.at<double>(0, 2);
+    double fy = k.at<double>(1, 1);
+    double cy = k.at<double>(1, 2);
+        
+    //开始迭代求解
+    for(int i = 0; i < iterations; i++)
+    {
+        Eigen::Matrix<double, 6, 6> H = Eigen::Matrix<double, 6, 6>::Zero();
+        Eigen::Matrix<double, 6, 1> b = Eigen::Matrix<double, 6, 1>::Zero();
+
+        //计算J、H、b
+        cost = 0;
+        for(int j = 0; j < (int)ps3d.size(); j++)
+        {		
+            Eigen::Vector3d tp3d = pose * ps3d[j];	//旋转后的空间坐标
+            Eigen::Vector2d tpNor2d(tp3d[0]/tp3d[2], tp3d[1]/tp3d[2]);	//旋转后点的归一化坐标
+            Eigen::Vector2d tp2d(fx*tpNor2d[0] + cx, fy*tpNor2d[1] + cy);	//旋转后点的像素坐标
+
+            Eigen::Vector2d e = ps2d[j] - tp2d;	//误差		
+            cost += e.squaredNorm();
+            
+            Eigen::Matrix<double, 2, 6> J;
+            double invZ = 1.0 / tp3d[2];
+            double invZ2 = invZ * invZ;
+            //J是2x6矩阵
+            J << -fx * invZ, 0, fx * tp3d[0] * invZ2,
+                fx * tp3d[0] * tp3d[1] * invZ2,	-fx - fx * tp3d[0] * tp3d[0] * invZ2, fx * tp3d[1] * invZ,
+                0, -fy * invZ, fy * tp3d[1] * invZ2,
+                fy + fy * tp3d[1] * tp3d[1] * invZ2, -fy * tp3d[0] * tp3d[1] * invZ2, -fy * tp3d[0] * invZ;
+
+            H += J.transpose()*J;
+            b += -J.transpose()*e;
+        }
+
+        //求解 Hx = b
+        Eigen::Matrix<double, 6, 1> dx;
+        dx = H.ldlt().solve(b);
+        
+        if(isnan(dx[0]))
+        {
+            cout << "isnan" << endl;
+            break;
+        }
+        if(i > 0 && cost >= lastCost)
+        {
+            cout << "cost and last cost: " << cost << " " << lastCost << endl;
+            break;
+        }
+        
+        //更新优化变量和目标函数
+        pose = Sophus::SE3d::exp(dx)*pose;
+        lastCost = cost;
+        
+        cout << i << "\tcost: " << cost << endl;
+        
+        //dx足够小
+        if(dx.norm() <= 1e-6)
+        {
+            cout << "converge" << endl;
+            break;
+        }
+    }
+}
+```
