@@ -1,4 +1,20 @@
 # <center> IMU preintegrarion </center>
+- [ IMU preintegrarion ](#-imu-preintegrarion-)
+- [预积分的概念和性质](#预积分的概念和性质)
+  - [IMU器件的测量模型与运动模型](#imu器件的测量模型与运动模型)
+    - [测量模型](#测量模型)
+    - [运动模型](#运动模型)
+  - [orbslam3预积分](#orbslam3预积分)
+    - [获取当前帧与上一帧之间的IMU数据，存放在mvImuFromLastFrame](#获取当前帧与上一帧之间的imu数据存放在mvimufromlastframe)
+    - [中值积分](#中值积分)
+    - [IMU状态更新](#imu状态更新)
+  - [预积分的误差传播](#预积分的误差传播)
+  - [IMU参与优化](#imu参与优化)
+    - [偏差不变时预积分测量值更新](#偏差不变时预积分测量值更新)
+    - [偏差更新时的预积分测量值更新](#偏差更新时的预积分测量值更新)
+    - [要点](#要点)
+  - [视觉和imu联合优化实践](#视觉和imu联合优化实践)
+
 # 预积分的概念和性质 
 主要的参考文档[邱博-预积分总结与公式推导.pdf](./orbslam_docs/邱博-预积分总结与公式推导.pdf)。  
 1. 特殊正交群so(3)
@@ -31,15 +47,16 @@ $$
 \end{aligned}
 $$
 ## IMU器件的测量模型与运动模型
-1. 陀螺仪的测量模型与加速度计测量模型  
+### 测量模型  
 $$
 \begin{aligned}
 \tilde{\boldsymbol{\omega}}^{b}_{wb} &=\boldsymbol{\omega}^{b}_{wb}+\mathbf{b}_{g}(t)+\mathbf{\eta}_{g}(t) \\
 {\mathbf{f}}^{b}(t) &=\mathbf{R}^{wT}_b\left(\mathbf{a}^{w}-\mathbf{g}^{w}\right)+\mathbf{b}_{a}(t)+\mathbf{\eta}_{a}(t)
 \end{aligned}
 $$
-IMU的陀螺仪测量值为$\tilde{\boldsymbol{\omega}}^{b}_{wb}$, 加速度计真实值$\mathbf{f}^{b}(t)$，真实值为${\omega}^{b}_{wb}$和$\mathbf{a}^{w}$ ，​ 小标g表示gyro，a表示acc， w表示在世界坐标系world ， b表示imu机体坐标body系 。   
-对时间的导数可写成:
+IMU的陀螺仪测量值为$\tilde{\boldsymbol{\omega}}^{b}_{wb}$, 加速度计测量值$\mathbf{f}^{b}(t)$，真实值为${\omega}^{b}_{wb}$和$\mathbf{a}^{w}$ ，​ $\mathbf{R}^{wT}_b$是 IMU 的旋转矩阵（从世界坐标系到 IMU 坐标系），$\mathbf{g}^{w}$是重力加速度，$\mathbf{b}_{g}(t),\mathbf{b}_{a}(t)$是加速度计和陀螺仪的偏置（bias），$\mathbf{\eta}_{g}(t),\mathbf{\eta}_{a}(t)$是测量噪声。小标g表示gyro，a表示acc， w表示在世界坐标系world ， b表示imu机体坐标body系 。    
+### 运动模型  
+IMU 的运动学模型描述了位姿、速度和加速度之间的关系，对时间的导数可写成:
 $$
 \begin{array}{l}
 \dot{\mathbf{p}}^w_{b_{t}}=\mathbf{v}_{t}^{w} \\
@@ -47,20 +64,21 @@ $$
 \dot{\mathbf{R}}^w_{b_{t}}=\mathbf{R}^w_{b_{t}}({\omega}^{b}_{wb}){^\wedge}\\
 \end{array}
 $$    
-使用欧拉积分（Euler Integration，三角形积分）可得到运动方程的离散形式如下,积分公式中的积分项则变成相对于第k时刻的姿态:
+其中，$(.)^{\wedge}$表示将向量转换为反对称矩阵。         
+## orbslam3预积分    
+在实际应用中，IMU 数据是离散采样的，因此预积分需要通过离散形式计算。使用欧拉积分（Euler Integration，三角形积分）可得到运动方程的离散形式如下,积分公式中的积分项则变成相对于第k时刻的姿态:
 $$
 \begin{array}{l}
 \mathbf{p}^w_{b_{k+1}}=\mathbf{p}^w_{b_{k}}+\mathbf{v}_{k}^{w} \Delta t+\frac{1}{2} \mathbf{g}^{w} \Delta t^{2}+\frac{1}{2}R_k(\tilde{f_k}-b^a_k-{\eta}^{ad}_{k})\Delta t^{2} \\
 \mathbf{v}_{k+1}^{w}=\mathbf{v}_{k}^{w}+\mathbf{g}^{w} \Delta t+ R_k(\tilde{f_k}-b^a_k-{\eta}^{ad}_{k})\Delta t \\
 \mathbf{R}^w_{b_{k+1}}=\mathbf{R}^w_{b_{k+1}}.Exp(（\tilde{w_k}-b^g_k-{\eta}^{gd}_{k}）\Delta t)
 \end{array}
-$$        
-## orbslam3预积分
+$$  
 ORB-SLAM3中预积分的实现过程在[Tracking::Track()](../ORB_SLAM3/src/Tracking.cc)函数里有实现，主要涉及两个函数：PreintegrateIMU和IntegrateNewMeasurement。调用流程以及对应的功能如下：  
-![alt text](image.png)    
+![alt text](./imu_images/image.png)    
 下面介绍下[Tracking::PreintegrateIMU](../ORB_SLAM3/src/Tracking.cc)函数，主要实现1、获得两帧之间的IMU；2、数据中值积分；3、IMU状态更新。 
 ### 获取当前帧与上一帧之间的IMU数据，存放在mvImuFromLastFrame    
-![alt text](image-1.png)   
+![alt text](./imu_images/image-1.png)   
 ```C++ 
     while(true)
     {
@@ -102,8 +120,8 @@ ORB-SLAM3中预积分的实现过程在[Tracking::Track()](../ORB_SLAM3/src/Trac
     }  
 ```   
 ### 中值积分    
-![alt text](image-2.png)     
-![alt text](image-3.png)
+![alt text](./imu_images/image-2.png)     
+![alt text](./imu_images/image-3.png)
 ```C++ 
     IMU::Preintegrated* pImuPreintegratedFromLastFrame = new IMU::Preintegrated(mLastFrame.mImuBias,mCurrentFrame.mImuCalib);
     // 针对预积分位置的不同做不同中值积分的处理
@@ -172,14 +190,14 @@ ORB-SLAM3中预积分的实现过程在[Tracking::Track()](../ORB_SLAM3/src/Trac
 ```   
 ### IMU状态更新
 执行函数在**mpImuPreintegratedFromLastKF->IntegrateNewMeasurement**和**pImuPreintegratedFromLastFrame->IntegrateNewMeasurement**，函数的定义在[Preintegrated::IntegrateNewMeasurement](../ORB_SLAM3/src/ImuTypes.cc)，在此过程中，视IMU的bias不变，更新的顺序如下，主要和每个变量相互之间的依赖关系有关，其依赖关系如图所示    
-![alt text](image-11.png)
+![alt text](./imu_images/image-11.png)
 1. 更新预积分测量值更新中的**dP、dV**，dP包含上一次的dV和dR，dV包含上一次的dR；
-![alt text](image-4.png)      
+![alt text](./imu_images/image-4.png)      
 2. 更新噪声更新中的A、B，主要是与$\Delta{\tilde{R}_{ij-1}}$有关部分:
-![alt text](image-5.png)     
+![alt text](./imu_images/image-5.png)     
 3. 更新Jacobian更新中的JPa、JPg、JVa、JVg     
-![alt text](image-6.png)   
-![alt text](image-7.png)
+![alt text](./imu_images/image-6.png)   
+![alt text](./imu_images/image-7.png)
 4. 更新dRi，由**罗德里格公式**计算$\Delta{\tilde{R}_{j-1}}$   
 ```C++
 IntegratedRotation::IntegratedRotation(const Eigen::Vector3f &angVel, const Bias &imuBias, const float &time)
@@ -212,11 +230,11 @@ IntegratedRotation::IntegratedRotation(const Eigen::Vector3f &angVel, const Bias
 }
 ```
 5. 更新预积分测量值更新中的dR   
-![alt text](image-8.png)      
+![alt text](./imu_images/image-8.png)      
 6. 更新噪声更新中的A、B   
-![alt text](image-9.png)  
+![alt text](./imu_images/image-9.png)  
 7. 更新Jacobian更新中的JRg    
-![alt text](image-10.png)
+![alt text](./imu_images/image-10.png)
 ```C++ 
 void Preintegrated::IntegrateNewMeasurement(const Eigen::Vector3f &acceleration, const Eigen::Vector3f &angVel, const float &dt)
 {
@@ -296,7 +314,12 @@ void Preintegrated::IntegrateNewMeasurement(const Eigen::Vector3f &acceleration,
     // 更新总时间
     dT += dt;
 }
-```   
+```     
+## 预积分的误差传播  
+由于 IMU 测量存在噪声和偏置，预积分的结果也会受到误差的影响。为了在优化中使用预积分结果，需要对误差进行建模和传播。
+偏置误差：IMU 的偏置通常是缓慢变化的，可以建模为随机游走过程。
+噪声误差：IMU 的测量噪声，通常假设为高斯白噪声。
+通过误差传播公式，可以得到预积分结果的协方差矩阵，用于后续的优化。
 ## IMU参与优化  
 对于视觉惯导SLAM而言，我们通过对IMU的测量进行预积分，可以获得连续两帧（如第i到第i+1帧）之间的相对位姿测量$\Delta{\tilde{p}_{ij}},\Delta{\tilde{v}_{ij}},\Delta{\tilde{R}_{ij}}$，图优化的核心是构造误差函数，通过最小化观测值和估计值之间的误差来建立优化。加入IMU之后，这一问题就变为图优化中的一条边，可以认为IMU的积分得到了新的观测值。而估计值可以是通过特征匹配等方式得到的。同时，在以BA优化的算法中一般是建立在关键帧上的约束，也就是PVQ相对于上一关键帧的增量是比较重要的。
 $error_{ij}=PVQ增量估计值_{ij}-PVQ增量观测值_{ij}$
@@ -410,7 +433,7 @@ $$
 &\Delta\hat{\mathbf{p}}_{ij}\approx\Delta\overline{\mathbf{p}}_{ij}+\frac{\partial\Delta\overline{\mathbf{p}}_{ij}}{\partial\overline{\mathbf{b}}^{-g}}\delta\mathbf{b}_{i}^{g}+\frac{\partial\Delta\overline{\mathbf{p}}_{ij}}{\partial\overline{\mathbf{b}}^{-a}}\delta\mathbf{b}_{i}^{a}
 \end{aligned}
 $$      
-![alt text](image-13.png)       
+![alt text](./imu_images/image-13.png)       
 ```C++ 
 //EdgeInertial建立相邻帧之间速度和位置的边
 void EdgeInertial::computeError()
@@ -523,9 +546,9 @@ void EdgeInertial::linearizeOplus()
     _jacobianOplus[5].block<3,3>(3,0) = Rbw1; // OK
 }
 ```  
-![alt text](image-14.png)
-![alt text](image-15.png)   
-![alt text](image-16.png)
+![alt text](./imu_images/image-14.png)
+![alt text](./imu_images/image-15.png)   
+![alt text](./imu_images/image-16.png)
 ### 要点  
 IMU的测量值和通过非IMU方式获得的预测值之间建立优化问题，完成非线性优化。
 而在这中间通过近似修正的方式避免了重新积分，这是预积分降低计算量的关键。(优化更新偏差，偏差修正之前的积分，积分再反馈到新的优化中）   
@@ -535,7 +558,7 @@ IMU的测量值和通过非IMU方式获得的预测值之间建立优化问题�
 使用上一关键帧以及当前帧的视觉信息和IMU信息联合优化当前帧位姿、速度和IMU零偏，调用如下:    
 [Tracking::Track()](../ORB_SLAM3/src/Tracking.cc) -> TrackLocalMap() -> [Optimizer::PoseInertialOptimizationLastKeyFrame()](../ORB_SLAM3/src/Optimizer.cc)   
 区别在于，前者使用上一普通帧位姿作为顶点，后者使用上一关键帧位姿作为顶点    
-![alt text](image-12.png)
+![alt text](./imu_images/image-12.png)
 ```C++ 
 //上一普通帧位姿作为顶点
 Frame* pFp = pFrame->mpPrevFrame;

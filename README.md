@@ -20,7 +20,7 @@ Real‐Time Appearance‐Based Mapping (RTAB‐Map)是一种基于外观的闭�
 2. 贝叶斯滤波算法，估计回环的概率
 3. 增量式在线构建视觉词典或词袋，针对一个特定环境不需要预训练过程
 4. 内存管理模型，保证实时在线运行     
-![alt text](image-6.png)  
+![alt text](./images/image-6.png)  
 代码主要过程：
 RTABMap（闭环检测）主入口函数 [Rtabmap::process](./rtabmap/corelib/src/Rtabmap.cpp)
 输入图像image及其id（header.seq）被封装到SensorData类,还有里程计的信息
@@ -40,14 +40,14 @@ RETRIEVAL（取出）
 Update loop closure links: make neighbors of the loop closure in RAM
 TRANSFER: move the oldest signature from STM to LTM   
 算法主要流程：  
-![alt text](image.png)    
+![alt text](./images/image.png)    
 内存管理模型：   
-![alt text](image-1.png)    
+![alt text](./images/image-1.png)    
 回环检测（若不考虑内存管理）过程：     
-![alt text](image-2.png)      
+![alt text](./images/image-2.png)      
 ## 内存更新    
 内存更新的过程包括Memory Update : Location creation + Add to STM + Weight Update (Rehearsal排演)，在主函数入口[Rtabmap::process](./rtabmap/corelib/src/Rtabmap.cpp)中的_memory->update()代码段进行调用，定义在[Memory::update()](./rtabmap/corelib/src/Memory.cpp) 函数中。   
-![alt text](image-4.png)
+![alt text](./images/image-4.png)
 ### 创建签名     
 代码在 [Memory::createSignature](./rtabmap/corelib/src/Memory.cpp) 中，其主要过程为
 1. 词典更新定义在[VWDictionary::update](./rtabmap/corelib/src/VWDictionary.cpp) ，调用如下线程:
@@ -218,12 +218,12 @@ s = new Signature(id,
 对每个样本计算他们与中心点的距离，取最小距离为归类；
 重新计算每个类的中心点；
 如果中心点的变化很小则算法收敛，退出；否则返回2     
-![alt text](image-7.png) 
+![alt text](./images/image-7.png) 
 根据 K-means，我们可以把已经提取的大量特征点聚类成一个含有k个单词的字典了。现在的问题，变为如何根据图像中某个特征点，查找字典中相应的单词？ 一般使用K叉树，步骤是：
 在根节点，用k-means将所有样本聚成k类
 对上层的每个父节点，把属于该节点的样本再次聚成k类，得到下一层。
 以此类推，最后得到叶子层，也就是所谓的单词。
-![alt text](image-8.png) 
+![alt text](./images/image-8.png) 
 ### 添加签名到STM
 调用的代码在[this->addSignatureToStm(signature, covariance)](./rtabmap/corelib/src/Memory.cpp),代码定义在 Memory::addSignatureToStm()中。   
 更新neighbors，添加链接(signature->addLink),添加签名ID到_stMem  
@@ -275,12 +275,12 @@ if(sB)
 $$
 v_d^i = \frac{n_d^i}{n_d} \log {\frac{N}{N^i}}
 $$
-![alt text](image-3.png)         
+![alt text](./images/image-3.png)         
 其中，$n_d$表示图像d中特征点数量，$n^i_d$则是图像d中单词i出现的次数，$\frac{n_d^i}{n_d}$就是所谓的 TF(Term Frequency) 表示单词i出现的频率。 N为离线训练字典文件时所用的特征点数量，$N_i$是训练时单词i的数量，$\log {\frac{N}{N^i}}$是 IDF(Inverse Document Frequency)。IDF 的逻辑在于， 如果某个单词出现在字典中的频率越低，其辨识度就越高，权重应该更大。     
 1、逆序索引单词涵盖了所有出现的单词
 2、每一个单词指向包含它的一系列图像
 3、采用投票机制选取候选者，加速搜索
-![alt text](image-5.png)    
+![alt text](./images/image-5.png)    
 正向索引表对应着每个图像，记录着它所包含的词汇树中的各级节点。对于图像d，计算出它的各个特征点，然后根据 Hamming 距离从词汇树的根节点到叶子节点， 将所有特征点的 BRIEF 描述子逐级遍历一遍，得到图像的特征向量$\boldsymbol{v_d} \in \mathbb{R}^W$。正向索引表记录了遍历到的各个节点计数，描述了***图像的特征***。 它可以用于加速特征匹配，前面提到的 SearchByBoW() 就是利用了这个数据结构，压缩了搜索空间。      
 ### 计算似然
 计算似然（权重）(Memory::computeLikelihood)，得到 rawLikelihood
