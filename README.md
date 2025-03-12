@@ -13,6 +13,9 @@
   - [回环假设选择](#回环假设选择)
   - [取回 Retrieval (LTM-\>WM)](#取回-retrieval-ltm-wm)
   - [转移 Transfer (STM-\>LTM)](#转移-transfer-stm-ltm)
+- [安装与运行](#安装与运行)
+  - [安装](#安装)
+  - [运行](#运行)
 
 # RTABMAP    
 Real‐Time Appearance‐Based Mapping (RTAB‐Map)是一种基于外观的闭环检测方法，具有良好的内存管理，以满足处理大场景和在线长周期管理要求。RTAB‐Map集成了视觉和激光雷达SLAM方案，并支持目前绝大多数的传感器,主要特点：
@@ -556,6 +559,41 @@ if(_highestHypothesis.second >= loopThr)
 ##  转移 Transfer (STM->LTM)  
 具有最低权重的定位点中，存储时间最长的将被转移到LTM（数据库SQLite）中。
 
+# 安装与运行
+## 安装
+由于存在软件冲突，最好在docker镜像中运行，先安装docker（推荐fishros），如果需要显示，安装NVIDIA Container Toolkit，这个需要离线安装，参考文档[Ubuntu 22.04离线安装Docker和NVIDIA Container Toolkit](https://zhuanlan.zhihu.com/p/15194336245),离线[安装包](https://github.com/NVIDIA/libnvidia-container/tree/gh-pages/stable/deb/amd64)目前安装版本是1.17.4-1。
+## 运行
+输入命令用于显示
+```shell
+XAUTH=/tmp/.docker.xauth
+touch $XAUTH
+xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f $XAUTH nmerge -
+```
+
+运行rtabmap的docker程序（在镜像里运行），需要修改源码地址比如 -v /media/ahpc/Home1/rtabmap2_ros/src:/root/ros2_ws/src 
+```shell
+docker run -dit \
+  --privileged \
+  -e DISPLAY=$DISPLAY \
+  -e QT_X11_NO_MITSHM=1 \
+  -e NVIDIA_VISIBLE_DEVICES=all \
+  -e NVIDIA_DRIVER_CAPABILITIES=all \
+  -e XAUTHORITY=$XAUTH \
+  --gpus=all \
+  --network host \
+  -v $XAUTH:$XAUTH \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  -v /media/ahpc/Home1/rtabmap2_ros/src:/root/ros2_ws/src \
+  introlab3it/rtabmap:22.04 \
+  /bin/bash 
+```   
+进入目录/root/ros2_ws
+source /opt/ros/humble/setup.bash
+编译
+colcon build --packages-select rtabmap --symlink-install --cmake-args -DWITH_TORCH=ON
+colcon build --executor sequential --symlink-install --cmake-args -DRTABMAP_SYNC_MULTI_RGBD=ON -DRTABMAP_SYNC_USER_DATA=ON 
+colcon build --parallel-workers 6 --symlink-install --cmake-args -DRTABMAP_SYNC_MULTI_RGBD=ON -DRTABMAP_SYNC_USER_DATA=ON 
+在容器外执行代码
  
 
 
