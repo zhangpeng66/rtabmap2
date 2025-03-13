@@ -16,6 +16,9 @@
 - [安装与运行](#安装与运行)
   - [安装](#安装)
   - [运行](#运行)
+    - [ubuntu22.04运行ros2的rtabmap](#ubuntu2204运行ros2的rtabmap)
+    - [解决容器无法显示问题](#解决容器无法显示问题)
+    - [gpu运行superpoint(ros1)](#gpu运行superpointros1)
 
 # RTABMAP    
 Real‐Time Appearance‐Based Mapping (RTAB‐Map)是一种基于外观的闭环检测方法，具有良好的内存管理，以满足处理大场景和在线长周期管理要求。RTAB‐Map集成了视觉和激光雷达SLAM方案，并支持目前绝大多数的传感器,主要特点：
@@ -563,6 +566,7 @@ if(_highestHypothesis.second >= loopThr)
 ## 安装
 由于存在软件冲突，最好在docker镜像中运行，先安装docker（推荐fishros），如果需要显示，安装NVIDIA Container Toolkit，这个需要离线安装，参考文档[Ubuntu 22.04离线安装Docker和NVIDIA Container Toolkit](https://zhuanlan.zhihu.com/p/15194336245),离线[安装包](https://github.com/NVIDIA/libnvidia-container/tree/gh-pages/stable/deb/amd64)目前安装版本是1.17.4-1。
 ## 运行
+### ubuntu22.04运行ros2的rtabmap
 输入命令用于显示
 ```shell
 XAUTH=/tmp/.docker.xauth
@@ -589,11 +593,62 @@ docker run -dit \
 ```   
 进入目录/root/ros2_ws
 source /opt/ros/humble/setup.bash
-编译
+sudo apt update
+rosdep install -r --from-paths src --ignore-src --rosdistro humble -y(补全依赖)
+sudo apt install ros-humble-imu-complementary-filter
+sudo apt install ros-humble-image-proc
+编译(不需要编译文件夹加**COLCON_IGNORE**文件)
 colcon build --packages-select rtabmap --symlink-install --cmake-args -DWITH_TORCH=ON
-colcon build --executor sequential --symlink-install --cmake-args -DRTABMAP_SYNC_MULTI_RGBD=ON -DRTABMAP_SYNC_USER_DATA=ON 
-colcon build --parallel-workers 6 --symlink-install --cmake-args -DRTABMAP_SYNC_MULTI_RGBD=ON -DRTABMAP_SYNC_USER_DATA=ON 
-在容器外执行代码
+colcon build --parallel-workers 2 --symlink-install --cmake-args -DRTABMAP_SYNC_MULTI_RGBD=ON -DRTABMAP_SYNC_USER_DATA=ON 
+编译完成在容器内终端启动命令：
+source install/setup.bash
+ros2 launch rtabmap_examples euroc_datasets.launch.py gt:=true
+在容器内开另外一个终端启动命令
+ros2 bag play MH_01_easy/MH_01_easy.db3
+ros2 bag play V1_01_easy/V1_01_easy.db3(存在回环，如下图)
+![alt text](./images/image-9.png)
+
+
+### 解决容器无法显示问题
+xhost +local:docker
+
+### gpu运行superpoint(ros1)
+docker run -dit \
+  --privileged \
+  -e DISPLAY=$DISPLAY \
+  -e QT_X11_NO_MITSHM=1 \
+  -e NVIDIA_VISIBLE_DEVICES=all \
+  -e NVIDIA_DRIVER_CAPABILITIES=all \
+  -e XAUTHORITY=$XAUTH \
+  --gpus=all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
+  --network host \
+  -v $XAUTH:$XAUTH \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  -v /media/ahpc/Home1/catkin_ws/src:/workspace/catkin_rtabmap/src \
+  marimo117/rtabmap_noetic \
+  /bin/bash
+
+1. 进入rtabmap目录/workspace/catkin_rtabmap/src/rtabmap/build，然后进行cmake预编译
+cmake -DTorch_DIR=/opt/conda/lib/python3.8/site-packages/torch/share/cmake/Torch -DWITH_TORCH=ON -DWITH_PYTHON=ON -DWITH_QT=ON ..
+2. 再用make进行编译
+3. 进入目录 ,输入命令进行编译ros程序
+catkin_make -DPYTHON_EXECUTABLE=/usr/bin/python3 -DRTABMap_DIR=/workspace/catkin_rtabmap/src/rtabmap/build
+4. 打开容器另外一个终端输入播放ros包程序rosbag play demo_mapping.bag 
+5. 运行程序
+```shell   
+roslaunch rtabmap_demos superpoint_robot_mapping.launch args:="--delete_db_on_start  \
+--SuperPoint/ModelPath /workspace/catkin_rtabmap/src/rtabmap/archive/2022-IlluminationInvariant/scripts/superpoint_v1.pt \
+--SuperGlue/Path /workspace/catkin_rtabmap/src/rtabmap/archive/2022-IlluminationInvariant/scripts/SuperGluePretrainedNetwork/rtabmap_superglue.py \
+--Reg/RepeatOnce false \
+--Vis/CorGuessWinSize 0 \
+--Kp/DetectorStrategy 11 \
+--Vis/FeatureType 11 \
+--Mem/UseOdomFeatures false \
+--Vis/CorNNType 6"
+```     
+![alt text](./images/image-10.png)
+
+
  
 
 
