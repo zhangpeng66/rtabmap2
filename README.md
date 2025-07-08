@@ -22,27 +22,30 @@
 
 # RTABMAP    
 Real‐Time Appearance‐Based Mapping (RTAB‐Map)是一种基于外观的闭环检测方法，具有良好的内存管理，以满足处理大场景和在线长周期管理要求。RTAB‐Map集成了视觉和激光雷达SLAM方案，并支持目前绝大多数的传感器,主要特点：
-1. 基于外观（Appearance-Based），通过图像相似度查找回环
-2. 贝叶斯滤波算法，估计回环的概率
-3. 增量式在线构建视觉词典或词袋，针对一个特定环境不需要预训练过程
-4. 内存管理模型，保证实时在线运行     
+- 基于外观（Appearance-Based），通过图像相似度查找回环
+- 贝叶斯滤波算法，估计回环的概率
+- 增量式在线构建视觉词典或词袋，针对一个特定环境不需要预训练过程
+- 内存管理模型，保证实时在线运行     
 ![alt text](./images/image-6.png)  
 代码主要过程：
 RTABMap（闭环检测）主入口函数 [Rtabmap::process](./rtabmap/corelib/src/Rtabmap.cpp)
-输入图像image及其id（header.seq）被封装到SensorData类,还有里程计的信息
-内存更新(Memory::update)
-1. 创建签名(Memory::createSignature)
-2. Add Signature To STM(Memory::addSignatureToStm)
-3. Weight Update, Rehearsal(Memory::rehearsal)
-4. Transfer the oldest signature from STM to WM(Memory::moveSignatureToWMFromSTM)
-贝叶斯滤波器更新
-1. 计算似然(Memory::computeLikelihood)
-2. 调整似然(Rtabmap::adjustLikelihood)
-3. 计算后验(BayesFilter::computePosterior)
-4. 选择最高的闭环假设
-RETRIEVAL（取出）
-1. Loop closure neighbors reactivation
-2. Load signatures from the database, from LTM to WM(Memory::reactivateSignatures)
+输入图像image及其id（header.seq）被封装到SensorData类,还有里程计的信息     
+
+**内存更新(Memory::update)**
+  - 创建签名(Memory::createSignature)
+  - Add Signature To STM(Memory::addSignatureToStm)
+  - Weight Update, Rehearsal(Memory::rehearsal)
+  - Transfer the oldest signature from STM to WM(Memory::moveSignatureToWMFromSTM)
+
+**贝叶斯滤波器更新**
+  - 计算似然(Memory::computeLikelihood)
+  - 调整似然(Rtabmap::adjustLikelihood)
+  - 计算后验(BayesFilter::computePosterior)
+  - 选择最高的闭环假设     
+
+**RETRIEVAL（取出）**
+  - Loop closure neighbors reactivation
+  - Load signatures from the database, from LTM to WM(Memory::reactivateSignatures)
 Update loop closure links: make neighbors of the loop closure in RAM
 TRANSFER: move the oldest signature from STM to LTM   
 算法主要流程：  
@@ -79,7 +82,7 @@ TRANSFER: move the oldest signature from STM to LTM
 		{
 			cv::Rect roi(globalRoi.x + j*colSize, globalRoi.y + i*rowSize, colSize, rowSize);
 			std::vector<cv::KeyPoint> subKeypoints;
-            //提取角点由配置文件决定，可以SURF ORB SIFT FAST都可以的
+            //提取角点由配置文件决定，默认是GFTT，可以SURF ORB SIFT FAST，SUPERPOINT都可以的
 			subKeypoints = this->generateKeypointsImpl(image, roi, mask);
 			if (this->getType() != Feature2D::Type::kFeaturePyDetector)
 			{
@@ -165,7 +168,7 @@ if(_incrementalDictionary)
 }
 ```   
 
-5. 创建签名(new Signature)，函数定义在[Signature](./rtabmap/corelib/src/Signature.cpp)。主要是图像的提取的特征，匹配信息，词袋模型信息等
+1. 创建签名(new Signature)，函数定义在[Signature](./rtabmap/corelib/src/Signature.cpp)。主要是图像的提取的特征，匹配信息，词袋模型信息等
 
 ```C++ 
 s = new Signature(id,
@@ -239,7 +242,7 @@ s = new Signature(id,
 $$
 similarity = \frac{pairs}{totalWords} 
 $$ 
-2. 相似度 > 阈值_similarityThreshold，假设合并(Memory::rehearsalMerge)，更新权重(signature->setWeight)     
+1. 相似度 > 阈值_similarityThreshold，假设合并(Memory::rehearsalMerge)，更新权重(signature->setWeight)    
 $$
 \omega_A = \omega_A + \omega_B + 1
 $$
@@ -277,7 +280,7 @@ if(sB)
 ### 签名转移 (STM->WM)    
 将签名在短期内存转移到工作内存，Memory::moveSignatureToWMFromSTM:_workingMem.insert 和 _stMem.erase    
 ## 贝叶斯滤波更新   
-逆向索引表对应着每个单词，记录着它出现在各个图像中的权重。比如，上图中 'Word 1' 在 'Image 68'、'Image 82' 等图像中出现了，在这两个图像中的权重分别是 0.79 和 0.73。 DBoW2 以TF-IDF(Term Frequency - Inverse Document Frequency)的形式计算单词i出现在图像d中的权重(跟代码的还是有点区别):
+**逆向索引表**对应着每个单词，记录着它出现在各个图像中的权重。比如，上图中 'Word 1' 在 'Image 68'、'Image 82' 等图像中出现了，在这两个图像中的权重分别是 0.79 和 0.73。 **DBoW2 以TF-IDF(Term Frequency - Inverse Document Frequency)的形式计算单词i出现在图像d中的权重(跟代码的还是有点区别)**:
 $$
 v_d^i = \frac{n_d^i}{n_d} \log {\frac{N}{N^i}}
 $$
@@ -287,50 +290,70 @@ $$
 2、每一个单词指向包含它的一系列图像
 3、采用投票机制选取候选者，加速搜索
 ![alt text](./images/image-5.png)    
-正向索引表对应着每个图像，记录着它所包含的词汇树中的各级节点。对于图像d，计算出它的各个特征点，然后根据 Hamming 距离从词汇树的根节点到叶子节点， 将所有特征点的 BRIEF 描述子逐级遍历一遍，得到图像的特征向量$\boldsymbol{v_d} \in \mathbb{R}^W$。正向索引表记录了遍历到的各个节点计数，描述了***图像的特征***。 它可以用于加速特征匹配，前面提到的 SearchByBoW() 就是利用了这个数据结构，压缩了搜索空间。      
+**正向索引表**对应着每个图像，记录着它所包含的词汇树中的各级节点。对于图像d，计算出它的各个特征点，然后根据 Hamming 距离从词汇树的根节点到叶子节点， 将所有特征点的 BRIEF 描述子逐级遍历一遍，得到图像的特征向量$\boldsymbol{v_d} \in \mathbb{R}^W$。正向索引表记录了遍历到的各个节点计数，描述了***图像的特征***。 它可以用于加速特征匹配，前面提到的 SearchByBoW() 就是利用了这个数据结构，压缩了搜索空间。      
 ### 计算似然
 计算似然（权重）(Memory::computeLikelihood)，得到 rawLikelihood
 ```C++ 
-float nwi; // nwi is the number of a specific word referenced by a place
-float ni; // ni is the total of words referenced by a place
-float nw; // nw is the number of places referenced by a specific word
-float N; // N is the total number of places
+float nwi; // nwi 表示一个地点引用的某个特定单词的次数
+float ni;  // ni 表示一个地点引用的所有单词的总数
+float nw;  // nw 表示引用某个特定单词的地点数量
+float N;   // N 表示数据集中地点的总数
 
-float logNnw;
-const VisualWord * vw;
+float logNnw; // 用于计算 IDF（逆文档频率）的对数项
+const VisualWord * vw; // 指向视觉词典中某个单词的指针
 
+// 获取数据集中地点的总数（签名数量）
 N = this->getSignatures().size();
 
+// 检查数据集中是否存在地点
 if(N)
 {
-    UDEBUG("processing... ");
-    // Pour chaque mot dans la signature SURF
+    UDEBUG("processing... "); // 调试信息，指示处理开始
+    
+    // 遍历 SURF 签名中的每个单词 ID
     for(std::list<int>::const_iterator i=wordIds.begin(); i!=wordIds.end(); ++i)
     {
+        // 只处理有效的单词 ID（大于 0）
         if(*i>0)
         {
-            // "Inverted index" - Pour chaque endroit contenu dans chaque mot
+            // 获取当前单词 ID 对应的 VisualWord 对象（倒排索引）
             vw = _vwd->getWord(*i);
+            // 断言单词在词典中存在，如果不存在则显示错误信息
             UASSERT_MSG(vw!=0, uFormat("Word %d not found in dictionary!?", *i).c_str());
 
+            // 获取该单词的引用（地点 ID 及其单词计数）
             const std::map<int, int> & refs = vw->getReferences();
-            nw = refs.size();
+            nw = refs.size(); // 该单词出现的地点数量
+            
+            // 如果该单词至少在一个地点中被引用
             if(nw)
             {
+                // 计算 IDF：log(N/nw)，其中 N/nw 是单词在地点中的逆频率
                 logNnw = log10(N/nw);
+                
+                // 仅当 IDF 非零时继续（避免除以零或无意义的值）
                 if(logNnw)
                 {
+                    // 遍历引用该单词的每个地点
                     for(std::map<int, int>::const_iterator j=refs.begin(); j!=refs.end(); ++j)
                     {
+                        // 查找该地点的 likelihood 条目
                         std::map<int, float>::iterator iter = likelihood.find(j->first);
-                        if(iter != likelihood.end())
+                        if(iter != likelihood.end()) // 确保地点存在于 likelihood 映射中
                         {
-                            nwi = j->second;
-                            ni = this->getNi(j->first);
+                            nwi = j->second; // 获取该地点中该单词的出现次数
+                            ni = this->getNi(j->first); // 获取该地点中的单词总数
+                            
+                            // 如果该地点的单词总数非零
                             if(ni != 0)
                             {
-                                //UDEBUG("%d, %f %f %f %f", vw->id(), logNnw, nwi, ni, ( nwi  * logNnw ) / ni);
+                                // TF-IDF 计算：(nwi * logNnw) / ni
+                                // nwi/ni = 词频 (TF)
+                                // logNnw = 逆文档频率 (IDF)
+                                // 将计算结果累加到该地点的 likelihood 值(似然值)
                                 iter->second += ( nwi  * logNnw ) / ni;
+                                // 调试输出（已注释）用于显示单词 ID 和 TF-IDF 组件
+                                //UDEBUG("%d, %f %f %f %f", vw->id(), logNnw, nwi, ni, ( nwi  * logNnw ) / ni);
                             }
                         }
                     }
@@ -339,8 +362,6 @@ if(N)
         }
     }
 }
-
-UDEBUG("compute likelihood (tf-idf) %f s", timer.ticks());   
 ```  
 ### 调整似然
 调整似然[Rtabmap::adjustLikelihood](./rtabmap/corelib/src/Rtabmap.cpp) $v_d^i$，得到 likelihood，依据 似然均值$\mu$和 似然标准差$\sigma$ 。
