@@ -1,15 +1,34 @@
 # <center>orbslam notebook </center>
 - [orbslam notebook ](#orbslam-notebook-)
   - [矩阵的性质](#矩阵的性质)
-    - [**特殊矩阵的性质**](#特殊矩阵的性质)
-  - [**基础矩阵**](#基础矩阵)
-    - [**计算基础矩阵**](#计算基础矩阵)
-    - [**基础矩阵的分解**](#基础矩阵的分解)
-  - [**单应矩阵**](#单应矩阵)
-    - [**计算单应矩阵**](#计算单应矩阵)
-    - [**单应矩阵的分解**](#单应矩阵的分解)
-  - [**三角测量原理**](#三角测量原理)
-  - [**PnP问题**](#pnp问题)
+    - [特征值分解](#特征值分解)
+    - [秩与自由度（ 方阵A(n\*n) ）](#秩与自由度-方阵ann-)
+    - [齐次线性方程组求解（秩表示可以列几个方程）](#齐次线性方程组求解秩表示可以列几个方程)
+    - [特殊矩阵的性质](#特殊矩阵的性质)
+      - [一：为什么本质矩阵(E)的秩为2？](#一为什么本质矩阵e的秩为2)
+      - [二：为什么基础矩阵(F)的秩为2](#二为什么基础矩阵f的秩为2)
+      - [三：为什么尺度等价性要减少一个自由度？](#三为什么尺度等价性要减少一个自由度)
+      - [四：为什么基础矩阵自由度是7？](#四为什么基础矩阵自由度是7)
+      - [五：为什么本质矩阵自由度是5？](#五为什么本质矩阵自由度是5)
+      - [六：为什么单应矩阵自由度是8？](#六为什么单应矩阵自由度是8)
+  - [基础矩阵](#基础矩阵)
+    - [对极几何](#对极几何)
+    - [计算基础矩阵](#计算基础矩阵)
+      - [归一化8点法](#归一化8点法)
+        - [算法步骤](#算法步骤)
+        - [对特征点归一化变换](#对特征点归一化变换)
+        - [求解基础矩阵F，步骤在8点法里](#求解基础矩阵f步骤在8点法里)
+        - [解除归一化](#解除归一化)
+    - [基础矩阵的分解](#基础矩阵的分解)
+    - [检查R和t](#检查r和t)
+      - [检查3D点和两个相机的视差](#检查3d点和两个相机的视差)
+      - [检查3D点的深度](#检查3d点的深度)
+      - [检查3D点在两个相机的重投影误差](#检查3d点在两个相机的重投影误差)
+  - [单应矩阵](#单应矩阵)
+    - [计算单应矩阵](#计算单应矩阵)
+    - [单应矩阵的分解](#单应矩阵的分解)
+  - [三角测量原理](#三角测量原理)
+  - [PnP问题](#pnp问题)
   - [重投影误差与BA优化函数](#重投影误差与ba优化函数)
     - [重投影误差](#重投影误差)
     - [BA优化](#ba优化)
@@ -22,11 +41,7 @@
 
 ## 矩阵的性质
 
-**（1）正交矩阵相乘仍然是正交矩阵** 
-
- *A**、**B*是正交矩阵,那么*AA'=E  、 BB'=E* 
-
- *(AB)\*(AB)'=AB\*B'A'=A(BB')A'=AEA'=AA'=E* 
+**（1）正交矩阵相乘仍然是正交矩阵**  
 
 **（2）一个矩阵乘以正交矩阵，范数不变**（保范性） 
 
@@ -42,87 +57,52 @@
 
 **（8）任意矩阵都能进行奇异值分解，只有方阵才可以进行特征值分解** 
 
-**特征值分解** 
-
+### 特征值分解
 如果一个向量 *v* 是方阵 *A*的特征向量，将可以表示成下面的形式： *Av= λv*，*λ* 称为特征向量 *v* 对应的特征值，并且一个矩阵的一组特征向量是一组正交向量。 
-
 特征值分解：**Q**是这个矩阵A的特征向量组成的矩阵，**Σ**是一个对角阵，每一个对角线上的元素就是一个特征值
 $A = Q{\Sigma}Q^{-1}$
-
- **奇异值分解：** 
-
+奇异值分解SVD：
 假设*A*是一个N * M的矩阵，*U*是一个N * N的方阵（正交矩阵），*Σ* 是一个N * M的矩阵（对角线上的元素为奇异值），$V^{T}$是一个M * M的矩阵（正交矩阵） 
 $A = U{\Sigma}V^{T}$
-
-
-**特征值和奇异值的关系：** 
-
+特征值和奇异值的关系：
 ![](./orbslam_images/GetImage26.png)
-
 （1）*U*的列向量，是 $AA^T$的特征向量； 
-
 （2）*V*的列向量，是 $A^{T}A$ 的特征向量； 
-
 （3）*A*的奇异值（*Σ*的非零对角元素）则是 $AA^T$ 或者 $A^{T}A$  的非零特征值的平方根。 
 
- **（9）秩与自由度（ 方阵A(n\*n) ）** 
+### 秩与自由度（ 方阵A(n\*n) ）
+矩阵的秩，指的是经过初等变换之后的非零行（列）的个数，若不存在零行（列），则为满秩矩阵（Rank(A)=n；关于矩阵的秩的另一种理解：A矩阵将n维空间中的向量映射到k（k<=n）维空间中，k=Rank(A) 
+矩阵（参数矩阵）的自由度，指的是要想求解出矩阵的所有元素至少需要列几个线性方程组。若矩阵本身带有 x 个约束，则只需要列n*n-x个方程组即可求出所有参数，即矩阵A的自由度为n*n-x。 
 
- 矩阵的秩，指的是经过初等变换之后的非零行（列）的个数，若不存在零行（列），则为满秩矩阵（Rank(A)=n；关于矩阵的秩的另一种理解：A矩阵将n维空间中的向量映射到k（k<=n）维空间中，k=Rank(A) 
-
- 矩阵（参数矩阵）的自由度，指的是要想求解出矩阵的所有元素至少需要列几个线性方程组。若矩阵本身带有 x 个约束，则只需要列n*n-x个方程组即可求出所有参数，即矩阵A的自由度为n*n-x。 
-
- **（10）齐次线性方程组求解（秩表示可以列几个方程）** 
-
+### 齐次线性方程组求解（秩表示可以列几个方程）
 1.r(A)=未知数个数n（约束较强） 
-
 该解空间只含有零向量 
-
 2.r(A)<未知数个数n（约束不够） 
-
 由齐次线性方程组解空间维数 = n - r(A) >0，所以该齐次线性方程组有非零解，而且不唯一，存在一个基础解系（基础解系中的向量个数为 n - r(A)个)。 
 
-### **特殊矩阵的性质**
+### 特殊矩阵的性质
 
-**一：为什么本质矩阵(E)的秩为2？** 
-
-**（1）因为一个矩阵乘以可逆矩阵秩不变，因为可逆矩阵可以表示为初等矩阵的乘积，而初等变换不改变矩阵的秩。** 
-
+#### 一：为什么本质矩阵(E)的秩为2？
+（1）因为一个矩阵乘以可逆矩阵秩不变，因为可逆矩阵可以表示为初等矩阵的乘积，而初等变换不改变矩阵的秩。 
 对于一个矩阵施行一次初等**列变换**相当于在这个矩阵**右乘**一个相应的初等矩阵 
-
 对于一个矩阵施行一次初等**行变换**相当于在这个矩阵**左乘**一个相应的初等矩阵 
-
 $E = t^{^\wedge}R$
-
 Rank(R)=3,R可逆矩阵
-
 *Rank(t^)=2* 
-
 ![](./orbslam_images/GetImage28.jpeg)
-
 R不会改变矩阵的秩，因此E矩阵的秩为2. 
-
-*Rank(E)=Rank(t^)=2* 
-
-**（2）因为本质矩阵 E 的奇异值必定是 $[σ, σ, 0]^T$ 的形式，矩阵的秩等于非零奇异值的个数** 
-
-**证明一：三维反对称矩阵的分解** 
-
+Rank(E)=Rank(t^)=2
+（2）因为本质矩阵 E 的奇异值必定是 $[σ, σ, 0]^T$ 的形式，矩阵的秩等于非零奇异值的个数
+证明一：三维反对称矩阵的分解
 ![](./orbslam_images/GetImage29.jpeg)
-
-**证明二：SVD分解与矩阵的迹** 
-
+证明二：SVD分解与矩阵的迹
 ![](./orbslam_images/GetImage30.jpeg)
 
-**二：为什么基础矩阵(F)的秩为2**
+#### 二：为什么基础矩阵(F)的秩为2
+$\boldsymbol{F} = \boldsymbol{K}^{-T}\mathbf{t}^{\wedge}\boldsymbol{R}\boldsymbol{K}^{-1}$
+两个相机内参矩阵和旋转矩阵R都是满秩矩阵（可逆矩阵），$\mathbf{t}^{\wedge}$是一个秩为2的矩阵，同样，矩阵乘以可逆矩阵秩不变，因为可逆矩阵可以表示为初等矩阵的乘积，而初等变换不改变矩阵的秩（左乘-行变换，右乘-列变换）。 
 
-$\boldsymbol{F} = \boldsymbol{K}^{-T}[\boldsymbol{t}]_{\times}\boldsymbol{R}\boldsymbol{K}^{-1}$
-
-两个相机内参矩阵和旋转矩阵R都是满秩矩阵（可逆矩阵），[T]x是一个秩为2的矩阵，同样，矩阵乘以可逆矩阵秩不变，因为可逆矩阵可以表示为初等矩阵的乘积，而初等变换不改变矩阵的秩（左乘-行变换，右乘-列变换）。 
-
- 
-
-**三：为什么尺度等价性要减少一个自由度？** 
-
+#### 三：为什么尺度等价性要减少一个自由度？
 以本质矩阵为例，表达两帧的相机归一化坐标之间的对应关系
 ![](./orbslam_images/GetImage32.png)
 将矩阵写成向量，转化为下式： 
@@ -131,40 +111,95 @@ $\boldsymbol{F} = \boldsymbol{K}^{-T}[\boldsymbol{t}]_{\times}\boldsymbol{R}\bol
 由于尺度等价性，所以对于9个参数的向量e，我们只需要通过8个方程计算出其中8个未知数即可， 8个数都用第9个数表示，由于尺度等价，所以第9个数取什么值都是对的。 
 单目相机的初始化往往由对极几何约束完成。对极几何约束应用的场景是已知两幅图像之间若干匹配点，求解两幅图像之间的相机运动，是一个2D-2D的问题。详细的推导过程可以参考《视觉SLAM14讲》中的过程，其核心求解是一个本质矩阵E（或者带有内参矩阵的基础矩阵），本质矩阵E的特点是具有尺度等价性。位姿R和t是由E通过奇异值分解得到的，其中R是正交矩阵，其逆等于自身的转置，相当于自身的约束可以克服掉尺度等价性；但是t没有办法克服尺度等价性，即这个t乘上任意一个非零的正数，都能满足对极几何约束。   
 ![alt text](./orbslam_images/image-6.png)
-对极几何约束的几何意义是$O_L,O_R,X$三点共面，纯旋转情况下$O_L,O_R$共点，t为0，本质矩阵也为0,无法分解出R。通常的初始化做法是，将t归一化，让其长度等于1，并作为单位计算相机的运动和图像特征点对应的3D点位置。初始化之后，便可以利用3D-2D的PnP方法，求解后续相邻帧的运动位姿。至于这个长度1对应到真实世界中的长度可能是5cm,也可能是40m，这就需要额外的深度信息介入进行确定，这个以t的长度作为单位的尺度世界只和真实世界之间相差一个尺度因子。
-
-**四：为什么基础矩阵自由度是7？** 
-
-$\boldsymbol{F} = \boldsymbol{K}^{-T}[\boldsymbol{t}]_{\times}\boldsymbol{R}\boldsymbol{K}^{-1}$
-
-左右相机内参的待定参数各为4，平移[T]x的待定参数是3，旋转矩阵R的自由度是3，加在一起是14个参数，也就是正常来说把14个参数都确定了才能确定F，但是实际上F是一个3*3的矩阵，只包含9个参数，所以计算F的自由度最大是9，也就是9个参数就可以确定F。 
-
+对极几何约束的几何意义是$O_L,O_R,X$三点共面，**纯旋转情况下$O_L,O_R$共点，t为0，本质矩阵也为0,无法分解出R，单目初始化不能只有纯旋转，必须有一定程度的平移。**。通常的初始化做法是，将t归一化，让其长度等于$\lVert t \rVert = 1$，并作为单位计算相机的运动和图像特征点对应的3D点位置。初始化之后，便可以利用3D-2D的PnP方法，求解后续相邻帧的运动位姿。至于这个长度1对应到真实世界中的长度可能是5cm,也可能是40m，这就需要额外的深度信息介入进行确定，这个以t的长度作为单位的尺度世界只和真实世界之间相差一个尺度因子，代码见[TwoViewReconstruction.cc](../ORB_SLAM3/src/TwoViewReconstruction.cc)的**DecomposeE函数**。
+```C++ 
+// 对 t 有归一化，但是这个地方并没有决定单目整个SLAM过程的尺度
+// 因为CreateInitialMapMonocular函数对3D点深度会缩放，然后反过来对 t 有改变
+t = t / t.norm();
+```
+对t长度的归一化直接导致了单目视觉的尺度不确定性。如果对轨迹和地图同时缩放任意倍数，我们得到的图像仍然是一样的。而对两张图像间的平移t进行归一化相当于固定尺度。以t的长度作为为单位长度，计算相机轨迹和特征点的三维位置。这被称为单目 slam 的初始化。初始化后，就可以利用 3D - 2D 来计算相机运动了。进行初始化的两张图像必须有一定程度的平移，而后都将以此步长的平移为单位。
+#### 四：为什么基础矩阵自由度是7？
+$\boldsymbol{F} = \boldsymbol{K}^{-T}\mathbf{t}^{\wedge}\boldsymbol{R}\boldsymbol{K}^{-1}$
+左右相机内参的待定参数各为4，平移$\mathbf{t}^{\wedge}$的待定参数是3，旋转矩阵R的自由度是3，加在一起是14个参数，也就是正常来说把14个参数都确定了才能确定F，但是实际上F是一个3*3的矩阵，只包含9个参数，所以计算F的自由度最大是9，也就是9个参数就可以确定F。 
 同时F满足下面两个约束，所以F的自由度是9-2=7. 
+（1）尺度等价性 
+（2）不可逆矩阵的性质，行列式为零的约束等式
 
+#### 五：为什么本质矩阵自由度是5？
+平移$\mathbf{t}^{\wedge}$的自由度是3，旋转矩阵R的自由度是3，加在一起是6个参数，也就是要想确定E矩阵，确定6个参数就够了，不用考虑E矩阵的所有9个参数，同时E满足下面约束，所以E的自由度是6-1=5. 
 （1）尺度等价性 
 
-（2）秩为2，行列式为0，det(F)=0 
-
-**五：为什么本质矩阵自由度是5？** 
-
-平移[t]x的自由度是3，旋转矩阵R的自由度是3，加在一起是6个参数，也就是要想确定E矩阵，确定6个参数就够了，不用考虑E矩阵的所有9个参数 
-
-同时E满足下面约束，所以E的自由度是6-1=5. 
-
-（1）尺度等价性 
-
- **六：为什么单应矩阵自由度是8？** 
-
+#### 六：为什么单应矩阵自由度是8？
 单应矩阵也具有尺度等价性：9-1=8 
-
 ![](./orbslam_images/GetImage35.jpeg)
 
-## **基础矩阵**    
- 计算基础矩阵的函数定义在[TwoViewReconstruction::FindFundamental()](../ORB_SLAM3/src/TwoViewReconstruction.cc)。
+## 基础矩阵   
 
-### **计算基础矩阵** 
-
-计算基础矩阵 *f*, 8组对应坐标点构成系数矩阵A，维度为8*9。 
+### 对极几何  
+![alt text](image-7.png)  
+上图展示了一对匹配好的特征点。我们希望求取这两帧之间的运动。设两个相机光心分别为$O_1$和$O_2$ ，第一帧到第二帧到运动为$R，t$。点$p_1$和点$p_2$ 是同一个空间点P在两个成像平面上的投影。连线$O_1 \ p_1$和$O_2 \ p_2$在三维空间中相交于点P 。这时，$O_1, O_2$和P三点确定一个平面，称为极平面 (epipolar plane)。连线$O_1, O_2$与像平面$I_1, I_2$的交点分别为$e_1, e_2$。点$e_1, e_2$称为极点 (epipoles)，是相机光心在另一幅影像上的投影。注意到这里$e_1, e_2$都位于像平面内。有时候它们有可能会落在成像平面之外。
+$O_1, O_2$称为基线 (baseline)。而极平面与两个像平面之间的交线$l_1, l_2$为极线 (epipolar line)，它们分别是射线$O_2 \ p_2$和$O_1 \ p_1$ 在对方影像上的投影。
+从几何上来看，射线$O_1 \ p_1$是像素点$p_1$所对应的物方点可能出现的位置：该射线上的所有点都有可能投影到点$p_1$上。射线$O_2 \ p_2$是像素点$p_2$所对应的物方点可能出现的位置。如果匹配正确的话，像素点$p_2$对应于同一个物方点。这两条射线的交点就是就是点P的空间位置。如果没有特征匹配，我们就必须在极线$l_2$上搜索$p_1$的匹配点。
+现在我们从代数的角度上看，在第一帧的相机坐标系下，点P的空间位置为：$\mathbf{P}=[X, Y, Z]^T$     
+根据针孔相机模型，不考虑畸变，两个像素点$p_1$,$p_2$点像素（$u,v$）坐标分别为：$s_1\mathbf{p}_1=\mathbf{K}\mathbf{P},\ s_2\mathbf{p}_2=\mathbf{K}(\mathbf{R}\mathbf{P}+\mathbf{t})$   
+$s_1p_1$和$p_1$成投影关系，他们在齐次坐标系下是相等的，我们称这种关系为尺度意义下相等，记作：$sp\simeq p$      
+在使用齐次坐标的时候，一个向量将等于它自身乘以一个非零的常数，这通常用于表达一个投影关系，$s_1p_1=p_1$，这里可以参考一下14讲中P100页关于归一化平面和归一化坐标的定义：
+归一化坐标可以看作相机前方$z=1$处平面上的一个点，这个$z=1$的平面上的点也叫做归一化平面。归一化坐标再左乘内参即可得到像素坐标，所以我们可以将像素坐标$(u,v)$看作是归一化平面上的点进行量化测量的结果
+$$
+\mathbf{RP_w +t}=\underbrace{[X,Y,Z]^T }_{相机坐标系} \rightarrow \underbrace{[\frac{X}{Z},\frac Y Z ,1]}_{归一化坐标系}
+$$
+我们再来看一下针孔相机的投影模型:
+$$
+\begin{pmatrix}
+ u\\
+ v\\
+1
+\end{pmatrix} = \frac{1}{Z} \begin{pmatrix}
+  f_x& 0 &c_x \\
+  f_y& 0  &c_y \\
+ 0 &0  &1
+\end{pmatrix}\begin{pmatrix}
+ X\\
+Y \\
+Z
+\end{pmatrix} \overset{\mathrm{def}}{=} \frac{1}{Z}KP
+$$
+针孔相机的成像模型中本身对于Z就是未知的无约束的。    
+那么上述的两个投影关系可以写成:$p_1 \simeq KP,p_2\simeq K(RP+t)$   
+这里K为相机内参矩阵。如果使用齐次坐标，则前面的系数$s_1, s_2$可以省略。设：
+$$
+\mathbf{x}_1=\mathbf{K}^{-1}\mathbf{p}_1,\ \mathbf{x}_2=\mathbf{K}^{-1}\mathbf{p}_2
+$$    
+这里，$x_1$和$x_2$分别为两个像素点在各自相机坐标系下的归一化平面坐标。将之代入上式（将 $p_1,p_2$分别带入上面的式子）可得：
+$$
+\mathbf{x}_2 = \mathbf{R}\mathbf{x}_1+\mathbf{t}
+$$   
+上面公式去除尺度因子之后仍然成立？其实带上尺度因子推倒了一遍，发现结果是一样的，也就是说尺度无法影响对极约束，当然求解出来的结果中的$t$,当然不是真实的尺度了，这里放出推倒过程：
+![alt text](image-8.png)   
+将上式两边同时左乘$\mathbf{t}^{\wedge}$，这相当于两侧同时和$t$做外积：
+$$
+\mathbf{t}^{\wedge}\mathbf{x}_2=\mathbf{t}^{\wedge}\mathbf{R}\mathbf{x}_1
+$$  
+再将两侧同时左乘$\mathbf{x}^T_2$:
+$$
+\mathbf{x}^T_2\mathbf{t}^{\wedge}\mathbf{x}_2=\mathbf{x}^T_2\mathbf{t}^{\wedge}\mathbf{R}\mathbf{x}_1
+$$    
+注意到$\mathbf{t}^{\wedge}\mathbf{x}_2$是一个垂直于二者的向量，因此它和$x_2$的内积为0。由此可得：
+$$
+\mathbf{x}^T_2\mathbf{t}^{\wedge}\mathbf{R}\mathbf{x}_1=0
+$$
+如果我们代入$p_1, p_2$则可得：
+$$
+\mathbf{p}^T_2\mathbf{K}^{-T}\mathbf{t}^{\wedge}\mathbf{R}\mathbf{K}^{-1}\mathbf{p}_1=0
+$$  
+这两个式子称为对极约束。它的几何意义为$O_1, O_2$ 和P三点共面。这两个式子的中间部分分别称为本质矩阵 (essential matrix) E和基础矩阵 (fundamental matrix) F。
+$$
+\mathbf{E} = \mathbf{t}^{\wedge}\mathbf{R}   \\ 
+\mathbf{F} =\mathbf{K}^{-T}\mathbf{t}^{\wedge}\mathbf{R}\mathbf{K}^{-1} \\
+\mathbf{x}_2^T\mathbf{E}\mathbf{x}_1=\mathbf{p}_2^T\mathbf{F}\mathbf{p}_1=0
+$$
+### 计算基础矩阵
+计算基础矩阵的函数定义在[TwoViewReconstruction::FindFundamental()](../ORB_SLAM3/src/TwoViewReconstruction.cc)，计算基础矩阵 *f*, 8组对应坐标点构成系数矩阵A，维度为8*9。 
 假设$\boldsymbol{x} = \begin{bmatrix} u & v & 1 \end{bmatrix}^T$为参考帧中的像素齐次坐标， $\boldsymbol{x'} = \begin{bmatrix} u' & v' & 1 \end{bmatrix}^T$为当前帧中与之匹配的坐标。那么式(1)可以展开如下:
 $$
 \begin{array}{c}
@@ -190,86 +225,70 @@ $$
         \end{equation}
 $$
 
-通常我们会找到很多对匹配点，构建矩阵 A，得到一个超定方程组。由于测量噪声的存在，基本上找不到一个解能够使得方程成立。 但我们可以通过最小二乘法找到一个f，使Af尽可能的接近 0。根据 MVG 一书的说法， 对矩阵 A 进行SVD分解 $A = U{\Sigma}V^{T}$，取V中的最后一列，就是一个能够最小化$\|\boldsymbol{Af} \| / \| \boldsymbol{f} \|$的解。 我们至少需要8个点才能求得基础矩阵，这也就是所谓的***八点法***。
-
-**问题转化为求使得|| Af||最小化并满足||** **f** **||=1的** **f** **:** 
-
-![](./orbslam_images/GetImage37.png)
-
-**结论：** **f** **的最小二乘解是对应于A的最小奇异值的奇异向量** 
-
- **b. 强迫约束（因为方程的个数>自由度）：用最接近F的矩阵F’ 代替F** 
-
-上述求得的 **f** 转化为的矩阵**F**一般不满足秩为2的约束，所以需要对**F**进行修正，将**F**的三个奇异值修正为2个，就**F**满足了秩为2的约束。 
-
-所以需要对**F**进行SVD分解，然后修正中间的奇异值矩阵 
-
-![](./orbslam_images/GetImage38.png)
-
-**(2) 归一化 8点法**（ 
-
-8点法成功的关键是在构造解的方程之前应对输入的数据认真进行适当的归 一化，图像点的一个简单变换(平移或变尺度)将使这个问题的条件极大地改善，从而提高结果的稳定性，函数定义在[TwoViewReconstruction::Normalize()](../ORB_SLAM3/src/TwoViewReconstruction.cc)。 
-
-**算法步骤：** 
-
+通常我们会找到很多对匹配点，构建矩阵 A，得到一个超定方程组。由于测量噪声的存在，基本上找不到一个解能够使得方程成立。 但我们可以通过最小二乘法找到一个f，使Af尽可能的接近 0。根据 MVG 一书的说法， 对矩阵 A 进行SVD分解 $A = U{\Sigma}V^{T}$，取V中的最后一列，就是一个能够最小化$\|\boldsymbol{Af} \| / \| \boldsymbol{f} \|$的解。 我们至少需要8个点才能求得基础矩阵，这也就是所谓的**八点法**。
+#### 归一化8点法
+8点法成功的关键是在构造解的方程之前应对输入的数据认真进行适当的归 一化，为了防止不同分辨率、尺度和坐标**原点**下的影响，图像点的一个简单变换(平移或变尺度)将使这个问题的条件极大地改善，从而提高结果的稳定性，函数定义在[TwoViewReconstruction::Normalize()](../ORB_SLAM3/src/TwoViewReconstruction.cc)。 
+##### 算法步骤
 ![](./orbslam_images/GetImage39.png)
 
-**a. 归一化变换** 
-
-![alt text](./orbslam_images/GetImage40.png)
-
-**b. 求解基础矩阵F，步骤在8点法里** 
-
-**c. 解除归一化** 
-
+##### 对特征点归一化变换 
+系数矩阵A是利用8点法求基础矩阵的关键，所以Hartey就认为，利用8点法求基础矩阵不稳定的一个主要原因就是原始的图像像点坐标组成的系数矩阵A不好造成的，而造成A不好的原因是像点的齐次坐标各个分量的数量级相差太大。基于这个原因，Hartey提出一种改进的8点法，在应用8点法求基础矩阵之前，先对像点坐标进行归一化处理，即对原始的图像坐标做同向性变换，这样就可以减少噪声的干扰，大大的提高8点法的精度。
+步骤一： 求取所有 N 个特征点的质心坐标（X, Y）
+$$
+meanX = \frac{\sum_{N}^{i=0}u_{i}}{N},\quad meanY = \frac{\sum_{N}^{i=0}v_{i}}{N}
+$$
+步骤二： 计算所有点相对于质心的平均距离
+$$
+meanDevX = \frac{\sum_{N}^{i=0}\left | u_{i}-meanX \right |}{N},\quad meanDevY = \frac{\sum_{N}^{i=0}\left | v_{i}-meanY \right |}{N}
+$$
+并将平均距离的倒数作为缩放尺度因子
+$$
+sX = \frac{1}{meanDevX} ,\quad sY = \frac{1}{meanDevY}
+$$
+步骤三： 对特征点的 x 和 y 坐标进行缩放，使得一阶绝对矩为 1，以此作为归一化的结果坐标
+$$
+x=x\cdot sX, \quad y = y \cdot  sY
+$$
+步骤四： 获得归一化矩阵 T（由 x y 方向的缩放因子和归一化的特征点质心组成）
+$$
+T = \begin{bmatrix}
+  sX &0  & -meanX\cdot sX\\ 
+  0 & sY & -meanY\cdot sY\\ 
+  0 & 0 & 1
+  \end{bmatrix}
+$$
+关于一阶绝对矩，什么是矩？ 在统计学中，矩表征随机量的分布。 一阶矩是随机变量的期望，二阶矩是随机变量平方的期望。一阶绝对矩是只变量与均值差的绝对值的平均。
+##### 求解基础矩阵F，步骤在8点法里 
+由于基础矩阵F在一个常量因子下是等价的，这样可以给基础矩阵F的元素组成的向量f施加一个约束条件：$\parallel f \parallel = 1$
+这样由K>=8个匹配的点对，组合成一个矩阵$Q_{K\times9}$，求解上面方程就变成了求解如下问题的最小二乘解
+$$
+\min_{\parallel f \parallel = 1}\parallel Qf \parallel ^2
+$$
+其中，矩阵Q的每一行来自一对匹配点；f是基础矩阵F元素构成的待求解的向量，根据2-范数的定义:
+$$
+\parallel Qf \parallel^2 = (Qf)^T(Qf)=f^T(Q^TQ)f
+$$
+将上式的中间部分提取出来得到矩阵$M=Q^TQ$,这是一个9×9的矩阵。基于拉格朗日-欧拉乘数优化定理，在$\parallel f \parallel = 1$约束下，$Qf=0$的最小二乘解，为矩阵$M=Q^TQ$的最小特征值对应的特征向量。所以可以对矩阵Q进行奇异值分解（SVD），$Q = U\Sigma V^T$。最小二乘解就是$V^T$的第9个列向量，也就是可由向量$f = V_9$构造基础矩阵F。
+![](./orbslam_images/GetImage37.png)
+##### 解除归一化 
 ![](./orbslam_images/GetImage41.jpeg)
 
- **(3) 最小点对应算法** 
+### 基础矩阵的分解  
+基础矩阵的分解函数定义在[TwoViewReconstruction::ReconstructF()](../ORB_SLAM3/src/TwoViewReconstruction.cc)，本质矩阵分解定义在**TwoViewReconstruction::DecomposeE函数**。
 
- **a. 7-点：仅用 7 组点对应来估计 F**（OpenCV：findFundamentalMat—runkenel—run7point） 
-
- 好处（1）：因为考虑7自由度，必定生成 一 个秩 2 的矩阵，从而无需添加强迫约束 
-
- 好处（2）：保证一个高概率的没有野值的结果所需的采样次数是样本集大小的指数函数，例如，8 组时达 99% 的监性度时所需的采样数是 7 组时所需采样数的两倍 
-
- 坏处：它可能给出 F 的 3 个实数解，且所有 3 个解都要通过检验来选择 
-
- 对于**Af=0**，**Rank(A)=7** , 
-
-即为$A = U{\Sigma}V^{T}$中$V^{T}$的最后两行. **f1=VT(7), f2=VT(8)** ， 则方程组的基础解系 **f=k\*f1+(1-k)\*f2** ，由 **f, f1, f2**组成的矩阵 **F**也满足这个关系：**F=k\*F1+(1-k)\*F2**，再加入**det(F)=0**的约束， 
-
-即**det(k\*F1+(1-k)\*F2)=0** ，得到一个关于**k**的三次多项式，可以求解出来三个可能的**F**解。 
-
- 
-
-**b. 6-点：根据基础矩阵与单应矩阵的关系** 
-
-![](./orbslam_images/GetImage42.jpeg)
-
-**2. 基于几何误差的非线性估计** 
-
-将估计基本矩阵的问题化为数学的最优化问题，然后使用某种优化迭代算法求解。算法如下: 
-
-(1) 构造基于几何意义的目标函数 
-
-(2) 选取8点算法的结果作为迭代算法的初始值 
-
-(3) 选取一种迭代方法(L-M方法)， 迭代求解最小化问题 
-
-构造基于几何意义的目标函数 
-
-常用准则: 
-
-**(1)点到对应极线距离的平方和（一般是通过数值求解之后出F矩阵之后用这个判断是否满足要求）** 
-
-![](./orbslam_images/GetImage43.jpeg)
-
-### **基础矩阵的分解**   
-基础矩阵的分解函数定义在[TwoViewReconstruction::ReconstructF()](../ORB_SLAM3/src/TwoViewReconstruction.cc)。
-
-根据基础矩阵$\boldsymbol{F} = \boldsymbol{K}^{-T}[\boldsymbol{t}]_{\times}\boldsymbol{R}\boldsymbol{K}^{-1}$和本质矩阵$\boldsymbol{E} = [\boldsymbol{t}]_{\times}\boldsymbol{R}$的定义，其中K是相机的内参矩阵， 我们可以从刚刚求解出的基础矩阵中算出本征矩阵:    
-$\boldsymbol{E} = \boldsymbol{K}^T \boldsymbol{FK}$   
-$[\boldsymbol{t}]_{\times}$,是由相机的平移向量t构成的斜对称矩阵，记作S吧,对于任意的3×3的斜对称矩阵都可以分解成$k \boldsymbol{UZU^T}$,其中U是一个正交矩阵，k为一个非零的常数。 Z具有如下的形式：
+根据基础矩阵$\boldsymbol{F} = \boldsymbol{K}^{-T}\mathbf{t}^{\wedge}\boldsymbol{R}\boldsymbol{K}^{-1}$和本质矩阵$\boldsymbol{E} = \mathbf{t}^{\wedge}\boldsymbol{R}$的定义，其中K是相机的内参矩阵， 我们可以从刚刚求解出的基础矩阵中算出本征矩阵:    
+$\boldsymbol{E} = \boldsymbol{K}^T \boldsymbol{FK}$  
+本质矩阵E的的充分必要条件是的奇异值分解具有如下的形式,其中令a = 1
+$$
+E=U
+\left[\begin{array}{c}
+a & &  \\
+& a &  \\
+& & 0
+\end{array}\right]
+V^T; \quad a>0 \tag{1.1}
+$$
+$\mathbf{t}^{\wedge}$,是由相机的平移向量t构成的反对称矩阵，记作S吧,对于任意的3×3的斜对称矩阵都可以分解成$k \boldsymbol{UZU^T}$,其中U是一个正交矩阵，k为一个非零的常数。 Z具有如下的形式：
 $$
 \boldsymbol{Z} = \begin{bmatrix}
             0 & 1 & 0 \\
@@ -286,7 +305,7 @@ $$
         \end{bmatrix}}_{\boldsymbol{W}}
 $$   
 在对极约束下，我们忽略符号的作用，有$\boldsymbol{Z} = \boldsymbol{D}_{1,1,0}\boldsymbol{W}$, 忽略尺度因子k的作用，有$\boldsymbol{S} = \boldsymbol{U}\boldsymbol{D}_{1,1,0}\boldsymbol{W}\boldsymbol{U}^T$。本征矩阵可以分解为$\boldsymbol{E} = \boldsymbol{U}\boldsymbol{D}_{0,0,1}(\boldsymbol{W}\boldsymbol{U}^T\boldsymbol{R})$。容易验证W是一个正交矩阵，所以$(\boldsymbol{W}\boldsymbol{U}^T\boldsymbol{R})$也是正交矩阵，记为$V^T$。 那么$\boldsymbol{U}\boldsymbol{D}_{-k,-k,0}\boldsymbol{V}^T$就是E的SVD分解。    
-上述的推导得到$\boldsymbol{E} = \boldsymbol{U}\boldsymbol{D}_{0,0,1}(\boldsymbol{W}\boldsymbol{U}^T\boldsymbol{R})$,的过程中，我们忽略了符号和尺度的作用。 如果本征矩阵分解为$\boldsymbol{E} = \boldsymbol{U}\boldsymbol{D}_{1,1,0}\boldsymbol{V}^T$的形式， 那么E=SR有两种可能的分解：    
+上述的推导得到$\boldsymbol{E} = \boldsymbol{U}\boldsymbol{D}_{0,0,1}(\boldsymbol{W}\boldsymbol{U}^T\boldsymbol{R})$,的过程中，我们忽略了符号和尺度的作用。 如果本质矩阵分解为$\boldsymbol{E} = \boldsymbol{U}\boldsymbol{D}_{1,1,0}\boldsymbol{V}^T$的形式， 那么E=SR有两种可能的分解：    
 $$
 \text{(1)}
         \begin{cases}
@@ -301,7 +320,22 @@ $$
             \boldsymbol{R} = \boldsymbol{UW^TV^T}
         \end{cases}
 $$
-因为在忽略符号的作用的情况下，$\boldsymbol{D}_{1,1,0}\boldsymbol{W}$与$\boldsymbol{D}_{1,1,0}\boldsymbol{W}^T$的作用一样。 上式中的R确定了相机的姿态矩阵。忽略尺度因子的作用时，上式中$\boldsymbol{S} = \boldsymbol{UZU^T}$,确定了相机的平移向量。 因为向量对自身的叉积为零，所以St=0，因此$\boldsymbol{t}=\boldsymbol{U}\begin{bmatrix} 0 & 0 & 1\end{bmatrix}^T = \boldsymbol{u_3}$,矩阵U的最后一列。但是因为E的符号不能确定，所以也不能确定t符号。 因此相机的位姿共有四种可能：
+因为在忽略符号的作用的情况下，$\boldsymbol{D}_{1,1,0}\boldsymbol{W}$与$\boldsymbol{D}_{1,1,0}\boldsymbol{W}^T$的作用一样。 上式中的R确定了相机的姿态矩阵。忽略尺度因子的作用时，上式中$\boldsymbol{S} = \boldsymbol{UZU^T}$,确定了相机的平移向量。 因为向量对自身的叉积为零，即$St=\mathbf{t}^{\wedge}t=0$，因此$\boldsymbol{t}=\boldsymbol{U}\begin{bmatrix} 0 & 0 & 1\end{bmatrix}^T = \boldsymbol{u_3}$,**即矩阵U的最后一列**。
+$$
+\left(U
+\left[\begin{array}{c}
+0 \\
+0 \\
+1
+\end{array}\right]\right)^{\wedge}=
+U
+\left[\begin{array}{c}
+0 &-1 &0  \\
+1 &0 &0  \\
+0 &0 &0
+\end{array}\right]U^T \tag{1.5}
+$$
+但是因为E的符号不能确定，所以也不能确定t符号。 因此相机的位姿共有四种可能：
 $$
 \begin{equation}
         \begin{array}{c}
@@ -314,37 +348,49 @@ $$
 $$   
 在这4中可能中，只有一种解能够保证特征点位于在两个相机的前面，既深度值为正的。把各个匹配点对代进去分贝检测一遍，就可以找出正确的那个。手写推导如下：
 ![ReconstructF](./orbslam_images/GetImage52.png)
+令 W 表示沿 Z 轴旋转 90° 得到的旋转矩阵
+$$
+\mathbf{W}=\mathbf{R}_z(\frac{\pi}{2}) = \begin{bmatrix}
+        0 &  -1& 0\\ 
+        1 & 0 & 0\\ 
+        0 & 0 & 1
+        \end{bmatrix}
+$$
+对于任意一个 E，对它分解都能得到两个与之对应的 R 和 t ，所以一共存在 4 组解
+$$
+\begin{align}
+\mathbf{t}_1^{\wedge} = \mathbf{U} \mathbf{R}_z(\frac{\pi}{2}) \mathbf{\Sigma} \mathbf{U}^T = U_3, & \ \mathbf{R}_1 = \mathbf{U} \mathbf{R}^T_z(\frac{\pi}{2}) \mathbf{V}^T \\
+\mathbf{t}_2^{\wedge} = \mathbf{U} \mathbf{R}_z(-\frac{\pi}{2}) \mathbf{\Sigma} \mathbf{U}^T = -U_3, & \ \mathbf{R}_2 = \mathbf{U} \mathbf{R}^T_z(-\frac{\pi}{2}) \mathbf{V}^T \\
+\end{align}
+$$
+其中$\mathbf{R}_z(\frac{\pi}{2})$，表示沿Z轴旋转90度的旋转矩阵。对比上面两个式子可以发现，这两组解其实是以参考帧为中心，绕Z轴呈180度旋转对称的两组解，如下图所示
+![alt text](image-9.png) 
+ 
+同时，由于本质矩阵E可以取任意符号，即E和-E是等价的，所以对任意一个E取负号又取得一个符合条件的解，所以一共有四组符合条件的解。
+我们可以将任意一对特征点代入所取得的4组解中，检测该点在两个相机下的深度值。显然物方特征点应该位于两个相机的前方，取两个**深度值都为正的解**即是正确的解。
 
-**b. 检查3D点和两个相机的视差** 
-
+### 检查R和t
+#### 检查3D点和两个相机的视差 
 ![](./orbslam_images/GetImage54.png)
-
-**c. 检查3D点的深度** 
-
+#### 检查3D点的深度 
 ![](./orbslam_images/GetImage55.png)
+#### 检查3D点在两个相机的重投影误差
+在误差允许范围内的计算内点数，大于阈值舍弃改组R和t
 
- **d. 检查3D点在两个相机的重投影误差，在误差允许范围内的计算内点数** 
-
-**计算本质矩阵（ORBSLAM是先计算基础矩阵F，然后通过相机内参计算E，没有直接计算E）**
-
-![](./orbslam_images/GetImage45.png)
-
-**（1）8点法** 
-
-基本做法与基础矩阵8点法相同，不同之处在于第二步：强迫约束 
-
-![](./orbslam_images/GetImage46.jpeg)
-
-**（2）5点法**（OpenCV:findEssentialMat—EMEstimatorCallback—runkenel） 
-
-原理参考文献：An Efficient Solution to the Five-Point Relative Pose Problem 
-
-具体步骤为： 
-
-![GetImage47](./orbslam_images/GetImage47.png)
-
-## **单应矩阵** 
-### **计算单应矩阵**   
+## 单应矩阵 
+假设使用同一相机在不同的位姿拍摄同一平面，如下图：
+![alt text](image-10.png)  
+上图表示场景中的平面$\pi$在两相机的成像，设平面$\pi$在第一个相机坐标系下的单位法向量为N，其到第一个相机中心（坐标原点）的距离为d，则平面$\pi$可表示为：$N^TX_1 = d$，转换下可得$\frac{1}{d}N^TX_1 = 1,\forall X_1 \in \pi$，其中$X_1$是三维点X在第一相机坐标系下的坐标，其在第二个相机坐标系下的坐标为$X_2$，则$X_2 = RX_1 + t$。将上面式子结合起来：
+$$
+X_2 = RX_1 + t\frac{1}{d}N^TX_1=(R+t\frac{N^T}{d})X_1=H'X_1
+$$
+所以就得到了同一平面两个不同相机坐标系的单应矩阵$H' = R+t\frac{N^T}{d}$
+上面得到的单应矩阵第一个相机坐标系取得，还需要将其变换到成像平面坐标系中，取得两图像间的单应矩阵。设$x_1,x_2$为X在两图像的像点坐标，$x_1 = KX_1,x_2 = KX_2$,K是相机的内参数，代入上面求得单应变换公式
+$$
+K^{-1}x_2 = HK^{-1}x_1 \Longrightarrow x_2 = KH'K^{-1}x_1=K(R+t\frac{N^T}{d})K^{-1}x_1
+$$
+所以，同一平面得到的两个图像间的单应矩阵H为$H = K(R+t\frac{N^T}{d})K^{-1}$
+### 计算单应矩阵  
 计算单应性矩阵的函数定义在[TwoViewReconstruction::FindHomography()](../ORB_SLAM3/src/TwoViewReconstruction.cc)。
 针对平面场景，根据摄影变换关系建立了两幅图像之间各点的一一对应关系。 这个映射关系可以用一个3×3的齐次矩阵H来表示，我们称之为单应矩阵。 假设x,x′分别是初始化过程中的参考帧和当前帧中匹配的两个特征点，K为相机的内参，被观测的平面的法向量是N，平面到参考帧的距离为d， 可以推导出x,x′存在如下的关系:
 $$
@@ -383,9 +429,9 @@ $$
             h_4 u_1 + h_5 v_1 + h_6 - h_7 u_1 v_2 - h_8 v_1 v_2 - v_2 = 0
         \end{cases}
 $$    
-假设我们有 m 对匹配点，根据上式我们可以写出 2m 个约束，可以写成 $A\hat{H} = \boldsymbol{0}$的矩阵形式，如下，由于尺度因子的存在，求解时一般认为$h_9=1$，所以向量$\hat{H}$中只有8个未知数，至少需要4对匹配点，写出8个线性方程才可以求解。
+假设我们有 m 对匹配点，根据上式我们可以写出 2m 个约束，可以写成 $A\hat{H} = \boldsymbol{0}$的矩阵形式，如下，由于尺度因子的存在，求解时一般认为$h_9=1$，所以向量$\hat{H}$中只有8个未知数，至少需要4对匹配点，写出8个线性方程才可以求解，**直接线性变换法（Direct Linear Transform）**。
 
-### **单应矩阵的分解**  
+### 单应矩阵的分解 
 单应性矩阵分解的函数定义在[TwoViewReconstruction::ReconstructH()](../ORB_SLAM3/src/TwoViewReconstruction.cc)。   
 下图表示场景中的平面M在两相机的成像，设平面M在第一个相机坐标系下的单位法向量为N，其到第一个相机中心（坐标原点）的距离为d，则平面M可表示为：$N^TX_1 = d$  
 $\frac{1}{d}N^TX_1 = 1,\forall X_1 \in \pi$  转换下
@@ -401,8 +447,8 @@ $H' = R+T\frac{1}{d}N^T$
 ![alt text](./orbslam_images/image-2.png)   
 ![alt text](./orbslam_images/image-3.png)   
 ORB-SLAM2 只处理 $d_1>d_2>d_3$ 的情况，根据$d', \varepsilon_1, \varepsilon_3$的符号一共有 8 种不同的解。 下面我们详细分析函数 ReconstructH，了解具体的实现过程。  
-## **三角测量原理**    
-函数的定义在[GeometricTools::Triangulate()](../ORB_SLAM3/src/GeometricTools.cc)，在检查R和t的时候用到**TwoViewReconstruction::CheckRT**，现在假设相机的内参矩阵为K，根据单应矩阵或者基础矩阵估计出相机的旋转矩阵R和平移向量t。那么对于空间中一点$\boldsymbol{X} = \begin{bmatrix} x & y & z \end{bmatrix}^T$， 其在相机中的成像点$\boldsymbol{x} = \begin{bmatrix} u & v & 1 \end{bmatrix}^T$ 。那么我们可以写出3D坐标到2D像素之间的投影关系：   
+## 三角测量原理    
+函数的定义在[GeometricTools::Triangulate()](../ORB_SLAM3/src/GeometricTools.cc)，**函数作用是根据求得R和t求解出3D点**，现在假设相机的内参矩阵为K，根据单应矩阵或者基础矩阵估计出相机的旋转矩阵R和平移向量t。那么对于空间中一点$\boldsymbol{X} = \begin{bmatrix} x & y & z \end{bmatrix}^T$， 其在相机中的成像点$\boldsymbol{x} = \begin{bmatrix} u & v & 1 \end{bmatrix}^T$ 。那么我们可以写出3D坐标到2D像素之间的投影关系：   
 $$
 \boldsymbol{x} = \cfrac{1}{z} \boldsymbol{K} [\boldsymbol{R} | \boldsymbol{t}] \boldsymbol{X} 
 $$
@@ -435,7 +481,7 @@ $$
             (u' {P'}_2^T - v'{P'}_1^T) \boldsymbol{X} = 0 \\
         \end{cases}
 $$
-上式中，$P_i$为投影矩阵中的第i行。从上式中每帧图像的像素点上取两个约束，就可以得到一个关于4个齐次坐标的4个方程$AX=0$，其中:
+上式中，**$P_i$为投影矩阵中的第i行**。从上式中每帧图像的像素点上取两个约束，就可以得到一个关于4个齐次坐标的4个方程$AX=0$，其中:
 $$
 \begin{equation}
         \boldsymbol{A} = \begin{bmatrix}
@@ -446,8 +492,40 @@ $$
         \end{bmatrix}
         \end{equation}
 $$   
-对上述矩阵A进行SVD分解，取V矩阵的最后一列就是X。因为在ORB-SLAM2中，地图坐标系是以初始化时的参考帧为基准构建的， 所以参考帧的投影矩阵为$P=K[I|0]$。  
-## **PnP问题**   
+```C++ 
+/** 
+ * @brief 三角化获得三维点(初始化用的)
+ * @param x_c1 点在关键帧1
+ * @param x_c2 点在关键帧2
+ * @param Tc1w 关键帧1投影矩阵  Camera 1 Projection Matrix K[I|0]
+ * @param Tc2w 关键帧2投影矩阵  Camera 2 Projection Matrix K[R|t]
+ * @param x3D 三维点坐标，作为结果输出
+ */
+bool GeometricTools::Triangulate(
+    Eigen::Vector3f &x_c1, Eigen::Vector3f &x_c2, Eigen::Matrix<float,3,4> &Tc1w, Eigen::Matrix<float,3,4> &Tc2w,
+    Eigen::Vector3f &x3D)
+{
+    Eigen::Matrix4f A;
+    // x = a*P*X， 左右两面乘Pc的反对称矩阵 a*[x]^ * P *X = 0 构成了A矩阵，中间涉及一个尺度a，因为都是归一化平面，但右面是0所以直接可以约掉不影响最后的尺度
+    A.block<1,4>(0,0) = x_c1(0) * Tc1w.block<1,4>(2,0) - Tc1w.block<1,4>(0,0);
+    A.block<1,4>(1,0) = x_c1(1) * Tc1w.block<1,4>(2,0) - Tc1w.block<1,4>(1,0);
+    A.block<1,4>(2,0) = x_c2(0) * Tc2w.block<1,4>(2,0) - Tc2w.block<1,4>(0,0);
+    A.block<1,4>(3,0) = x_c2(1) * Tc2w.block<1,4>(2,0) - Tc2w.block<1,4>(1,0);
+
+    // 解方程 AX=0
+    Eigen::JacobiSVD<Eigen::Matrix4f> svd(A, Eigen::ComputeFullV);
+
+    Eigen::Vector4f x3Dh = svd.matrixV().col(3);
+
+    if(x3Dh(3)==0)
+        return false;
+    // 求出的是4维的结果[X,Y,Z,A]，所以需要除以最后一维使之为1，就成了[X,Y,Z,1]这种齐次形式Euclidean coordinates 
+    x3D = x3Dh.head(3)/x3Dh(3);
+
+    return true;
+}
+```
+## PnP问题
 PnP 问题(Perspective-n-Point Problem)是，已知相机内参矩阵K和 n 个 3D 空间点${c_1,c_2,⋯,c_n}$及其到图像上 2D 的投影点${μ_1,μ_2,⋯,μ_n}$，求解相机的位置和姿态。记第 i 个 3D 空间点的齐次坐标为 $\boldsymbol{c_i} = \begin{bmatrix} x_i & y_i & z_i & 1\end{bmatrix}^T$，其在图像上投影的 2D 像素坐标为 $\boldsymbol{\mu_i} = \begin{bmatrix} u_i & v_i & 1 \end{bmatrix}^T$。 其投影过程，可以分解为两步：    
 1. 根据相机的位姿，将空间点从世界坐标系下变换到相机坐标系下。
 2. 将相机坐标系下的点，根据相机内参矩阵，投影到图像上。     
