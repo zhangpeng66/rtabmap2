@@ -6,14 +6,16 @@
     - [运动模型](#运动模型)
   - [orbslam3预积分](#orbslam3预积分)
     - [获取当前帧与上一帧之间的IMU数据，存放在mvImuFromLastFrame](#获取当前帧与上一帧之间的imu数据存放在mvimufromlastframe)
-    - [中值积分](#中值积分)
-    - [IMU状态更新](#imu状态更新)
+    - [中值滤波](#中值滤波)
+    - [IMU状态更新（预积分）](#imu状态更新预积分)
   - [预积分的误差传播](#预积分的误差传播)
   - [IMU参与优化](#imu参与优化)
     - [偏差不变时预积分测量值更新](#偏差不变时预积分测量值更新)
     - [偏差更新时的预积分测量值更新](#偏差更新时的预积分测量值更新)
     - [要点](#要点)
   - [视觉和imu联合优化实践](#视觉和imu联合优化实践)
+    - [位姿惯性优化使用上一关键帧](#位姿惯性优化使用上一关键帧)
+    - [位姿惯性优化使用上一帧](#位姿惯性优化使用上一帧)
 
 # 预积分的概念和性质 
 主要的参考文档[邱博-预积分总结与公式推导.pdf](./orbslam_docs/邱博-预积分总结与公式推导.pdf)。  
@@ -66,7 +68,7 @@ $$
 $$    
 其中，$(.)^{\wedge}$表示将向量转换为反对称矩阵。         
 ## orbslam3预积分    
-在实际应用中，IMU 数据是离散采样的，因此预积分需要通过离散形式计算。使用欧拉积分（Euler Integration，三角形积分）可得到运动方程的离散形式如下,积分公式中的积分项则变成相对于第k时刻的姿态:
+在实际应用中，IMU 数据是离散采样的，因此预积分需要通过离散形式计算，将[测试模型](#测量模型)的**测量值转为真实值**。使用欧拉积分（Euler Integration）可得到运动方程的离散形式如下,积分公式中的积分项则变成相对于第k时刻的姿态:
 $$
 \begin{array}{l}
 \mathbf{p}^w_{b_{k+1}}=\mathbf{p}^w_{b_{k}}+\mathbf{v}_{k}^{w} \Delta t+\frac{1}{2} \mathbf{g}^{w} \Delta t^{2}+\frac{1}{2}R_k(\tilde{f_k}-b^a_k-{\eta}^{ad}_{k})\Delta t^{2} \\
@@ -76,7 +78,7 @@ $$
 $$  
 ORB-SLAM3中预积分的实现过程在[Tracking::Track()](../ORB_SLAM3/src/Tracking.cc)函数里有实现，主要涉及两个函数：PreintegrateIMU和IntegrateNewMeasurement。调用流程以及对应的功能如下：  
 ![alt text](./imu_images/image.png)    
-下面介绍下[Tracking::PreintegrateIMU](../ORB_SLAM3/src/Tracking.cc)函数，主要实现1、获得两帧之间的IMU；2、数据中值积分；3、IMU状态更新。 
+下面介绍下[Tracking::PreintegrateIMU](../ORB_SLAM3/src/Tracking.cc)函数，主要实现1、获得两帧之间的IMU；2、数据中值滤波；3、IMU状态更新。 
 ### 获取当前帧与上一帧之间的IMU数据，存放在mvImuFromLastFrame    
 ![alt text](./imu_images/image-1.png)   
 ```C++ 
@@ -119,12 +121,12 @@ ORB-SLAM3中预积分的实现过程在[Tracking::Track()](../ORB_SLAM3/src/Trac
             usleep(500);
     }  
 ```   
-### 中值积分    
+### 中值滤波    
 ![alt text](./imu_images/image-2.png)     
 ![alt text](./imu_images/image-3.png)
 ```C++ 
     IMU::Preintegrated* pImuPreintegratedFromLastFrame = new IMU::Preintegrated(mLastFrame.mImuBias,mCurrentFrame.mImuCalib);
-    // 针对预积分位置的不同做不同中值积分的处理
+    // 针对预积分位置的不同做不同中值滤波的处理
     /**
      *  根据上面imu帧的筛选，IMU与图像帧的时序如下：
      *  Frame---IMU0---IMU1---IMU2---IMU3---IMU4---------------IMUx---Frame---IMUx+1
@@ -188,17 +190,17 @@ ORB-SLAM3中预积分的实现过程在[Tracking::Track()](../ORB_SLAM3/src/Trac
         pImuPreintegratedFromLastFrame->IntegrateNewMeasurement(acc,angVel,tstep);
     }
 ```   
-### IMU状态更新
+### IMU状态更新（预积分）
 执行函数在**mpImuPreintegratedFromLastKF->IntegrateNewMeasurement**和**pImuPreintegratedFromLastFrame->IntegrateNewMeasurement**，函数的定义在[Preintegrated::IntegrateNewMeasurement](../ORB_SLAM3/src/ImuTypes.cc)，在此过程中，视IMU的bias不变，更新的顺序如下，主要和每个变量相互之间的依赖关系有关，其依赖关系如图所示    
 ![alt text](./imu_images/image-11.png)
-1. 更新预积分测量值更新中的**dP、dV**，dP包含上一次的dV和dR，dV包含上一次的dR；
+1. **更新预积分测量值更新中的dP、dV**，dP包含上一次的dV和dR，dV包含上一次的dR；
 ![alt text](./imu_images/image-4.png)      
 2. 更新噪声更新中的A、B，主要是与$\Delta{\tilde{R}_{ij-1}}$有关部分:
 ![alt text](./imu_images/image-5.png)     
 3. 更新Jacobian更新中的JPa、JPg、JVa、JVg     
 ![alt text](./imu_images/image-6.png)   
 ![alt text](./imu_images/image-7.png)
-4. 更新dRi，由**罗德里格公式**计算$\Delta{\tilde{R}_{j-1}}$   
+4. 更新dRi，由**罗德里格公式**计算$\Delta{\tilde{R}_{j-1j}}$   
 ```C++
 IntegratedRotation::IntegratedRotation(const Eigen::Vector3f &angVel, const Bias &imuBias, const float &time)
 {
@@ -327,7 +329,7 @@ $error_{ij}=PVQ增量估计值_{ij}-PVQ增量观测值_{ij}$
 $\mathbf{R}_j=\mathbf{R}_i\cdot\prod\limits_{k=i}^{j-1}\mathrm{Exp}\Big(\Big(\tilde{\boldsymbol{\omega}}_k-\mathbf{b}_k^g-\boldsymbol{\eta}_k^{gd}\Big)\cdot\Delta t\Big)$   
 $\mathbf{v}_j=\mathbf{v}_i+\sum_{k=i}^ja^w\Delta t=\mathbf{v}_i+\mathbf{g}\cdot\Delta t_{ij}+\sum_{k=i}^{j-1}\mathbf{R}_k\cdot\left(\mathbf{\tilde{a}}_k-\mathbf{b}_k^a-\eta_k^{ad}\right)\cdot\Delta t$
 $\mathbf{p}_j=\mathbf{p}_i+\sum_{k=i}^j\mathbf{v}_k\cdot\Delta t+\frac{1}{2}a^w\Delta t^2=\mathbf{p}_i+\sum_{k=i}^{j-1}\left[\mathbf{v}_k\cdot\Delta t+\frac{1}{2}\mathbf{g}\cdot\Delta t^2+\frac{1}{2}\mathbf{R}_k\cdot\left(\mathbf{\tilde{a}}_k-\mathbf{b}_k^a-\eta_k^{ad}\right)\cdot\Delta t^2\right]$   
-因为目标是找到bias之间的关系，使用:
+其中$\Delta t_{ij}=\sum_{k=i}^j \Delta t = (j-i)\Delta t$，为了避免每次更新初始的$R_i,v_i,p_i$都需要重头积分求解$R_j,v_j,p_j$ ，将上面的公式右项部分移动到左项，引出预积分项（**理想值**）如下：
 $\begin{aligned}
 \Delta\mathbf{R}_{ij}& \triangleq\mathbf{R}_i^T\mathbf{R}_j=\prod_{k=i}^{j-1}\mathrm{Exp}\Big(\Big(\tilde{\boldsymbol{\omega}}_k-\mathbf{b}_k^g-\boldsymbol{\eta}_k^{gd}\Big)\cdot\Delta t\Big)
 \end{aligned}$    
@@ -337,7 +339,7 @@ $\begin{aligned}
 $\begin{aligned}
 \Delta\mathbf{p}_{ij}& \triangleq\mathbf{R}_{i}^{T}\left(\mathbf{p}_{j}-\mathbf{p}_{i}-\mathbf{v}_{i}\cdot\Delta t_{ij}-\frac{1}{2}\mathbf{g}\cdot\Delta t_{ij}^{2}\right) =\sum_{k=i}^{j-1}\left[\Delta\mathbf{v}_{ik}\cdot\Delta t+\frac{1}{2}\Delta\mathbf{R}_{ik}\cdot\left(\mathbf{\tilde{a}}_k-\mathbf{b}_k^a-\boldsymbol{\eta}_k^{ad}\right)\cdot\Delta t^2\right]
 \end{aligned}$     
-上面是普通的IMU积分过程，我们的核心其实是找到增量和bias之间的关系，可以视为要找到:
+上面是普通的IMU积分过程，引出**预积分理想值和测量值**的关系如下，等式左边理想值，右边是预计分值，有两种情况：一种偏置不变，一种是偏置变化：
 $\Delta R_{ij}\triangleq\Delta\tilde{\mathbf{R}}_{ij}(b^g_i)exp(-\delta \phi_{ij})$    
 $\Delta v_{ij}\triangleq\Delta\tilde{\mathbf{v}}_{ij}(b^g_i,b^a_i)-\delta v_{ij}$   
 $\Delta p_{ij}\triangleq\Delta\tilde{\mathbf{p}}_{ij}(b^g_i,b^a_i)-\delta p_{ij}$     
@@ -412,9 +414,9 @@ $\Delta v_{ij}\triangleq\Delta\tilde{\mathbf{v}}_{ij}(b^g_i,b^a_i)-\delta v_{ij}
 $\Delta p_{ij}\triangleq\Delta\tilde{\mathbf{p}}_{ij}(b^g_i,b^a_i)-\delta p_{ij}$    
 代入PVQ增量真值表达式得到：    
 $\begin{aligned}&\Delta\tilde{\mathbf{R}}_{ij}\approx\Delta\mathbf{R}_{ij}\operatorname{Exp}\Big(\delta\vec{\phi}_{ij}\Big)=\mathbf{R}_i^T\mathbf{R}_j\operatorname{Exp}\Big(\delta\vec{\phi}_{ij}\Big)\\&\Delta\tilde{\mathbf{v}}_{ij}\approx\Delta\mathbf{v}_{ij}+\delta\mathbf{v}_{ij}=\mathbf{R}_i^T\left(\mathbf{v}_j-\mathbf{v}_i-\mathbf{g}\cdot\Delta t_{ij}\right)+\delta\mathbf{v}_{ij}\\&\Delta\tilde{\mathbf{p}}_{ij}\approx\Delta\mathbf{p}_{ij}+\delta\mathbf{p}_{ij}=\mathbf{R}_i^T\left(\mathbf{p}_j-\mathbf{p}_i-\mathbf{v}_i\cdot\Delta t_{ij}-\frac12\mathbf{g}\cdot\Delta t_{ij}^2\right)+\delta\mathbf{p}_{ij}\end{aligned}$   
-上述表达式即为PVQ增量测量值（含IMU测量值及偏差估计值）与真值之间的关系，即形如“测量值=真值+噪声”的形式。     
+上述表达式即为PVQ增量测量值（含IMU测量值及偏差估计值）与理想（真）值之间的关系，即形如“**测量值=理想值+噪声**”的形式，$\operatorname{Exp}\Big(\delta\vec{\phi}_{ij}\Big),\delta\mathbf{v}_{ij},\delta\mathbf{p}_{ij}$是假设**偏置不变**情况得到的，$\Delta\tilde{\mathbf{R}}_{ij},\Delta\tilde{\mathbf{v}}_{ij},\Delta\tilde{\mathbf{p}}_{ij}$[IMU状态更新（预积分）](#imu状态更新预积分)中dR,dv和dp。     
 ### 偏差更新时的预积分测量值更新
-前面的预积分计算，都是在假设积分区间内陀螺和加计的偏差恒定的基础上推导的。当 bias 发生变化时，若仍按照前述公式，预积分测量值需要整个重新计算一遍，这将非常的耗费算力。为了解决这个问题，提出了利用线性化来进行偏差变化时预积分项的一阶近似更新方法。   
+前面的预积分计算，都是在假设积分区间内陀螺和加计的偏差恒定的基础上推导的。当 bias 发生变化时，若仍按照前述公式，预积分测量值需要整个重新计算一遍，这将非常的耗费算力。为了解决这个问题，提出了利用线性化来进行偏差变化时预积分项的**一阶近似更新**方法。   
 使用$_{\mathbf{b}_i}^{-g}$和$_{\mathbf{b}_i}^{-a}$表示的旧的偏差，新的偏差$\hat{\mathbf{b}}_i^g$和$\hat{\mathbf{b}}_i^a$由旧偏差和更新量$\delta\mathbf{b}_i^g$和$\delta\mathbf{b}_i^a$相机$\hat{\mathbf{b}}_{i}^{a}\leftarrow\overline{\mathbf{b}}_{i}^{a}+\delta\mathbf{b}_{i}^{a}$得到的，于是有预积分关于偏差估计值变化的一阶近似更新公式如下：   
 $$
 \begin{aligned}
@@ -430,20 +432,24 @@ $$
 \begin{aligned}
 &\Delta\hat{\mathbf{R}}_{ij}\approx\Delta\overline{{\mathbf{R}}}_{ij}\cdot\mathrm{Exp}\left(\frac{\partial\Delta\overline{{\mathbf{R}}}_{ij}}{\partial\overline{{\mathbf{b}}}^{g}}\delta\mathbf{b}_{i}^{g}\right) \\
 &\Delta\hat{\mathbf{v}}_{ij}\approx\Delta\overline{\mathbf{v}}_{ij}+\frac{\partial\Delta\bar{\mathbf{v}}_{ij}}{\partial\overline{\mathbf{b}}^{g}}\delta\mathbf{b}_{i}^{g}+\frac{\partial\Delta\overline{\mathbf{v}}_{ij}}{\partial\overline{\mathbf{b}}^{a}}\delta\mathbf{b}_{i}^{a} \\
-&\Delta\hat{\mathbf{p}}_{ij}\approx\Delta\overline{\mathbf{p}}_{ij}+\frac{\partial\Delta\overline{\mathbf{p}}_{ij}}{\partial\overline{\mathbf{b}}^{-g}}\delta\mathbf{b}_{i}^{g}+\frac{\partial\Delta\overline{\mathbf{p}}_{ij}}{\partial\overline{\mathbf{b}}^{-a}}\delta\mathbf{b}_{i}^{a}
+&\Delta\hat{\mathbf{p}}_{ij}\approx\Delta\overline{\mathbf{p}}_{ij}+\frac{\partial\Delta\overline{\mathbf{p}}_{ij}}{\partial\overline{\mathbf{b}}^{g}}\delta\mathbf{b}_{i}^{g}+\frac{\partial\Delta\overline{\mathbf{p}}_{ij}}{\partial\overline{\mathbf{b}}^{a}}\delta\mathbf{b}_{i}^{a}
 \end{aligned}
-$$      
-![alt text](./imu_images/image-13.png)       
+$$ 
+上面式子$\Delta\overline{\mathbf{R}}_{ij},\Delta\overline{\mathbf{v}}_{ij},\Delta\overline{\mathbf{p}}_{ij}$就是[IMU状态更新（预积分）](#imu状态更新预积分)中dR,dv和dp，$\frac{\partial\Delta\overline{{\mathbf{R}}}_{ij}}{\partial\overline{{\mathbf{b}}}^{g}},\frac{\partial\Delta\overline{\mathbf{p}}_{ij}}{\partial\overline{\mathbf{b}}^{a}},\frac{\partial\Delta\overline{\mathbf{p}}_{ij}}{\partial\overline{\mathbf{b}}^{g}},\frac{\partial\Delta\bar{\mathbf{v}}_{ij}}{\partial\overline{\mathbf{b}}^{g}},\frac{\partial\Delta\bar{\mathbf{v}}_{ij}}{\partial\overline{\mathbf{b}}^{g}}$是JRg、JPa、JPg、JVa、JVg。
+可得到**残差 = 理想值 - 对测量值预计分偏差估计值**如下形式     
+![alt text](./imu_images/image-13.png)  
+
+惯性边残差在[G2oTypes.cc](../ORB_SLAM3/src/G2oTypes.cc)文件EdgeInertial::computeError函数。    
 ```C++ 
 //EdgeInertial建立相邻帧之间速度和位置的边
 void EdgeInertial::computeError()
 {
     // TODO Maybe Reintegrate inertial measurments when difference between linearization point and current estimate is too big
-    const VertexPose* VP1 = static_cast<const VertexPose*>(_vertices[0]);           //位置p1
+    const VertexPose* VP1 = static_cast<const VertexPose*>(_vertices[0]);           //位姿T1（位置+姿态）
     const VertexVelocity* VV1= static_cast<const VertexVelocity*>(_vertices[1]);    //速度v1
     const VertexGyroBias* VG1= static_cast<const VertexGyroBias*>(_vertices[2]);    //陀螺仪零偏Bgi
     const VertexAccBias* VA1= static_cast<const VertexAccBias*>(_vertices[3]);      //加速度计零偏Bai
-    const VertexPose* VP2 = static_cast<const VertexPose*>(_vertices[4]);           //位置p2
+    const VertexPose* VP2 = static_cast<const VertexPose*>(_vertices[4]);           //位姿T2位置+姿态）
     const VertexVelocity* VV2 = static_cast<const VertexVelocity*>(_vertices[5]);   //速度v2
     const IMU::Bias b1(VA1->estimate()[0],VA1->estimate()[1],VA1->estimate()[2],VG1->estimate()[0],VG1->estimate()[1],VG1->estimate()[2]);
     const Eigen::Matrix3d dR = mpInt->GetDeltaRotation(b1).cast<double>();
@@ -566,7 +572,9 @@ VertexPose* VPk = new VertexPose(pFp);
 //上一关键帧位姿作为顶点
 KeyFrame* pKF = pFrame->mpLastKeyFrame;
 VertexPose* VPk = new VertexPose(pKF);  
-```    
+```  
+**求出位姿的平移分量t是有尺度，不是相机坐标系下尺度**  
+### 位姿惯性优化使用上一关键帧
 使用上一关键帧+当前帧的视觉信息和IMU信息，优化当前帧位姿
 可分为以下几个步骤：
 Step 1：创建g2o优化器，初始化顶点和边
@@ -1139,7 +1147,8 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
     //返回值：内点数 = 总地图点数目 - 坏点（外点）数目
     return nInitialCorrespondences - nBad;
 }
-```    
+```  
+### 位姿惯性优化使用上一帧  
 使用上一帧+当前帧的视觉信息和IMU信息，优化当前帧位姿
 可分为以下几个步骤：
 Step 1：创建g2o优化器，初始化顶点和边

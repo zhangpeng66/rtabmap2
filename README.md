@@ -1,10 +1,18 @@
 # <center> 视觉slam学习笔记 </center>  
 - [ 视觉slam学习笔记 ](#-视觉slam学习笔记-)
+- [视觉里程计](#视觉里程计)
 - [RTABMAP](#rtabmap)
   - [内存更新](#内存更新)
-    - [创建签名](#创建签名)
+    - [定位创建](#定位创建)
+      - [词典更新](#词典更新)
+      - [角点检测](#角点检测)
+      - [计算描述子](#计算描述子)
+      - [描述子转词典](#描述子转词典)
+      - [创建签名](#创建签名)
     - [添加签名到STM](#添加签名到stm)
     - [更新权重](#更新权重)
+      - [计算相似度](#计算相似度)
+      - [更新权重](#更新权重-1)
     - [签名转移 (STM-\>WM)](#签名转移-stm-wm)
   - [贝叶斯滤波更新](#贝叶斯滤波更新)
     - [计算似然](#计算似然)
@@ -20,8 +28,36 @@
     - [解决容器无法显示问题](#解决容器无法显示问题)
     - [gpu运行superpoint(ros1)](#gpu运行superpointros1)
 
+# 视觉里程计
+里程计节点可以实现任何类型的里程计方法，与所使用的传感器无关，它应该向 RTAB-Map 提供目前估计的机器人姿态，带有相应tf变换（例如，/ odom -> /base_link）的 Odometry 消息。对于视觉里程计，RTAB-Map 实现了两种标准里程计方法称为帧到图 (F2M) 和帧到帧 (F2F)。这些方法之间的主要区别在于，F2F 将新帧注册到最后一个关键帧，而 F2M 将新帧注册到从过去关键帧创建的本地特征图。
+![alt text](./images/image-4.png)
+特征检测：获取到新的一帧后，检测GFTT特征，也支持OpenCV中其他的特征点，但选择 GFTT 是为了简化参数调整并在不同的图像尺寸和光强度下获得统一检测的特征。对于立体图像，深度信息是通过光流使用迭代 LucasKanade 方法计算的，以得出左右图像之间每个特征的视差。对于 RGB-D 图像，深度图像用作 GFTT 的掩码，以避免提取无效深度的特征。
+特征匹配：对于 F2M，匹配是通过最近邻搜索和最近邻距离比 (NNDR) 计算的，使用 BRIEF 描述子将提取的特征与特征图中的特征进行对比。Feature Map 包含 3D 特征和最后一个关键帧的描述子。对于 F2F，光流直接在 GFTT 特征点上完成，无需提取描述子，提供与关键帧的更快特征对应。
+运动预测：运动模型用于根据先前的运动变换预测关键帧（F2F）或特征图（F2M）的特征在当前帧中的位置。这限制了特征匹配的搜索窗口以提供更好的匹配，特别是在具有动态对象和重复纹理的环境中。
+运动估计：计算特征对应关系时，OpenCV 的 PnP RANSAC 实现用于计算当前帧对应于关键帧 (F2F) 或特征图 (F2M) 中的特征的变换。
+局部 BA：对特征图中所有关键帧的特征 (F2M) 或仅对最后一个关键帧 (F2F) 的特征进行优化得到运动变换结果。
+姿态更新：使用运动估计的变换，然后更新输出里程计以及 tf 变换。使用3D 特征对应之间的中值绝对偏差 (MAD) 方法计算协方差。
+关键帧和特征图更新：如果在运动估计期间计算的内点数低于固定阈值“Odom/KeyFrameThr”，则更新关键帧或特征图。对于 F2F，关键帧简单地被当前帧替换。对于 F2M，通过添加新帧中的不匹配特征并更新由局部 BA 模块优化的匹配特征的位置来更新特征图。特征图有一个固定的最大特征临时保存（因此最大的关键帧）。当特征图的大小超过固定阈值“OdomF2M/MaxSize”时，与当前帧不匹配的最旧特征被删除。如果关键帧在特征图中不再具有特征，则将其丢弃。
+默认使用F2M模式，代码定义在[OdometryF2M.cpp](./rtabmap/corelib/src/odometry/OdometryF2M.cpp)文件中
+```C++ 
+Transform OdometryF2M::computeTransform(
+		SensorData & data,
+		const Transform & guessIn,
+		OdometryInfo * info)
+{
+//.....
+    transform = regPipeline_->computeTransformationMod(
+            tmpMap,   //地图3D点
+            *lastFrame_, //当前帧2D点
+            // special case for ICP-only odom, set guess to identity if we just started or reset
+            //估计初始pose
+            guessIteration==0 && !guess.isNull()?this->getPose()*guess:!regPipeline_->isImageRequired()&&this->framesProcessed()<2?this->getPose():Transform(),
+            &regInfo);
+//.....
+}
+```
 # RTABMAP    
-Real‐Time Appearance‐Based Mapping (RTAB‐Map)是一种基于外观的闭环检测方法，具有良好的内存管理，以满足处理大场景和在线长周期管理要求。RTAB‐Map集成了视觉和激光雷达SLAM方案，并支持目前绝大多数的传感器,主要特点：
+Real‐Time Appearance‐Based Mapping (RTAB‐Map)是一种**基于外观的闭环检测方法**，具有良好的内存管理，以满足处理大场景和在线长周期管理要求。RTAB‐Map集成了视觉和激光雷达SLAM方案，并支持目前绝大多数的传感器,主要特点：
 - 基于外观（Appearance-Based），通过图像相似度查找回环
 - 贝叶斯滤波算法，估计回环的概率
 - 增量式在线构建视觉词典或词袋，针对一个特定环境不需要预训练过程
@@ -56,53 +92,56 @@ TRANSFER: move the oldest signature from STM to LTM
 ![alt text](./images/image-2.png)      
 ## 内存更新    
 内存更新的过程包括Memory Update : Location creation + Add to STM + Weight Update (Rehearsal排演)，在主函数入口[Rtabmap::process](./rtabmap/corelib/src/Rtabmap.cpp)中的_memory->update()代码段进行调用，定义在[Memory::update()](./rtabmap/corelib/src/Memory.cpp) 函数中。   
-![alt text](./images/image-4.png)
-### 创建签名     
+### 定位创建     
 代码在 [Memory::createSignature](./rtabmap/corelib/src/Memory.cpp) 中，其主要过程为
-1. 词典更新定义在[VWDictionary::update](./rtabmap/corelib/src/VWDictionary.cpp) ，调用如下线程:
-    ```C++ 
-   	if(_parallelized && !isIntermediateNode)
-	{
-		UDEBUG("Start dictionary update thread");
-		preUpdateThread.start();
-	}
-    ```
-   1. 构建FLANN索引，根据描述子构建KDTree索引词典 (_flannIndex->buildKDTreeIndex(descriptor, KDTREE_SIZE, useDistanceL1_, _rebalancingFactor))，KDTree的创建基于分层k-mean聚类。
-   2. 更新_dataTree，将词典的描述子加入_dataTree.push_back(w->getDescriptor());
-2. 角点(GFTT)检测调用代码为_feature2D->generateKeypoints，定义在[Feature2D::generateKeypoints](./rtabmap/corelib/src/Features2d.cpp)
-   均匀分布(gridRows_, gridCols_)，限制点数(maxFeatures_)，亚像素提取(cv::cornerSubPix)
-   ```C++ 
-   	// Get keypoints
-	int rowSize = globalRoi.height / gridRows_;
-	int colSize = globalRoi.width / gridCols_;
-	int maxFeatures =	maxFeatures_ / (gridRows_ * gridCols_);
-	for (int i = 0; i<gridRows_; ++i)
-	{
-		for (int j = 0; j<gridCols_; ++j)
-		{
-			cv::Rect roi(globalRoi.x + j*colSize, globalRoi.y + i*rowSize, colSize, rowSize);
-			std::vector<cv::KeyPoint> subKeypoints;
-            //提取角点由配置文件决定，默认是GFTT，可以SURF ORB SIFT FAST，SUPERPOINT都可以的
-			subKeypoints = this->generateKeypointsImpl(image, roi, mask);
-			if (this->getType() != Feature2D::Type::kFeaturePyDetector)
-			{
-				limitKeypoints(subKeypoints, maxFeatures, roi.size(), this->getSSC());
-			}
-			if(roi.x || roi.y)
-			{
-				// Adjust keypoint position to raw image
-				for(std::vector<cv::KeyPoint>::iterator iter=subKeypoints.begin(); iter!=subKeypoints.end(); ++iter)
-				{
-					iter->pt.x += roi.x;
-					iter->pt.y += roi.y;
-				}
-			}
-			keypoints.insert( keypoints.end(), subKeypoints.begin(), subKeypoints.end() );
-		}
-	}
-   ```
-3. 描述子(BRIEF)计算，调用在_feature2D->generateDescriptors(imageMono, keypoints)，函数定义在[Feature2D::generateDescriptors](./rtabmap/corelib/src/Features2d.cpp)
-4. 量化描述子转化为词典quantize descriptors to vocabulary函数调用在_vwd->addNewWords(descriptorsForQuantization, id)，函数定义在[VWDictionary::addNewWords](./rtabmap/corelib/src/VWDictionary.cpp)
+#### 词典更新
+词典更新定义在[VWDictionary::update](./rtabmap/corelib/src/VWDictionary.cpp) ，调用如下线程:
+```C++ 
+if(_parallelized && !isIntermediateNode)
+{
+    UDEBUG("Start dictionary update thread");
+    preUpdateThread.start();
+}
+```
+- 构建FLANN索引，根据描述子构建KDTree索引词典 (_flannIndex->buildKDTreeIndex(descriptor, KDTREE_SIZE, useDistanceL1_, _rebalancingFactor))，KDTree的创建基于分层k-mean聚类。
+- 更新_dataTree，将词典的描述子加入_dataTree.push_back(w->getDescriptor());
+#### 角点检测
+角点(GFTT)检测调用代码为_feature2D->generateKeypoints，定义在[Feature2D::generateKeypoints](./rtabmap/corelib/src/Features2d.cpp)
+均匀分布(gridRows_, gridCols_)，限制点数(maxFeatures_)，亚像素提取(cv::cornerSubPix)
+```C++ 
+// Get keypoints
+int rowSize = globalRoi.height / gridRows_;
+int colSize = globalRoi.width / gridCols_;
+int maxFeatures =	maxFeatures_ / (gridRows_ * gridCols_);
+for (int i = 0; i<gridRows_; ++i)
+{
+    for (int j = 0; j<gridCols_; ++j)
+    {
+        cv::Rect roi(globalRoi.x + j*colSize, globalRoi.y + i*rowSize, colSize, rowSize);
+        std::vector<cv::KeyPoint> subKeypoints;
+        //提取角点由配置文件决定，默认是GFTT，可以SURF ORB SIFT FAST，SUPERPOINT都可以的
+        subKeypoints = this->generateKeypointsImpl(image, roi, mask);
+        if (this->getType() != Feature2D::Type::kFeaturePyDetector)
+        {
+            limitKeypoints(subKeypoints, maxFeatures, roi.size(), this->getSSC());
+        }
+        if(roi.x || roi.y)
+        {
+            // Adjust keypoint position to raw image
+            for(std::vector<cv::KeyPoint>::iterator iter=subKeypoints.begin(); iter!=subKeypoints.end(); ++iter)
+            {
+                iter->pt.x += roi.x;
+                iter->pt.y += roi.y;
+            }
+        }
+        keypoints.insert( keypoints.end(), subKeypoints.begin(), subKeypoints.end() );
+    }
+}
+```
+#### 计算描述子
+ 描述子(BRIEF)计算，调用在_feature2D->generateDescriptors(imageMono, keypoints)，函数定义在[Feature2D::generateDescriptors](./rtabmap/corelib/src/Features2d.cpp)
+#### 描述子转词典
+量化描述子转化为词典quantize descriptors to vocabulary函数调用在_vwd->addNewWords(descriptorsForQuantization, id)，函数定义在[VWDictionary::addNewWords](./rtabmap/corelib/src/VWDictionary.cpp)
 描述子匹配(descriptors – dataTree)，调用函数_flannIndex->knnSearch(descriptors, results, dists, k, KNN_CHECKS);，并计算距离dists    
 添加单词 或 参考+1
 badDist=true（匹配数量特别少，或 NNDR(neareast neighbor distance ratio) 大于阈值_nndrRatio，然后创建VisualWord并添加到_visualWords  
@@ -167,8 +206,8 @@ if(_incrementalDictionary)
     }
 }
 ```   
-
-1. 创建签名(new Signature)，函数定义在[Signature](./rtabmap/corelib/src/Signature.cpp)。主要是图像的提取的特征，匹配信息，词袋模型信息等
+#### 创建签名
+创建签名(new Signature)，函数定义在[Signature](./rtabmap/corelib/src/Signature.cpp)。主要是图像的提取的特征，匹配信息，词袋模型和里程计信息等
 
 ```C++ 
 s = new Signature(id,
@@ -238,11 +277,13 @@ s = new Signature(id,
 更新neighbors，添加链接(signature->addLink),添加签名ID到_stMem  
 ### 更新权重   
 函数调用在[this->rehearsal(signature, stats)](./rtabmap/corelib/src/Memory.cpp),代码主要在 Memory::rehearsal 中。   
-1. signature与STM中最新的签名比较，计算相似度(float sim = signature->compareTo(*sB))    
+#### 计算相似度
+signature与STM中最新的签名比较，计算相似度(float sim = signature->compareTo(*sB))    
 $$
 similarity = \frac{pairs}{totalWords} 
 $$ 
-1. 相似度 > 阈值_similarityThreshold，假设合并(Memory::rehearsalMerge)，更新权重(signature->setWeight)    
+#### 更新权重
+相似度 > 阈值_similarityThreshold，假设合并(Memory::rehearsalMerge)，更新权重(signature->setWeight)    
 $$
 \omega_A = \omega_A + \omega_B + 1
 $$

@@ -156,7 +156,7 @@ $$
 1
 \end{pmatrix} = \frac{1}{Z} \begin{pmatrix}
   f_x& 0 &c_x \\
-  f_y& 0  &c_y \\
+  0& f_y  &c_y \\
  0 &0  &1
 \end{pmatrix}\begin{pmatrix}
  X\\
