@@ -364,7 +364,7 @@ $$
 \mathbf{t}_2^{\wedge} = \mathbf{U} \mathbf{R}_z(-\frac{\pi}{2}) \mathbf{\Sigma} \mathbf{U}^T = -U_3, & \ \mathbf{R}_2 = \mathbf{U} \mathbf{R}^T_z(-\frac{\pi}{2}) \mathbf{V}^T \\
 \end{align}
 $$
-其中$\mathbf{R}_z(\frac{\pi}{2})$，表示沿Z轴旋转90度的旋转矩阵。对比上面两个式子可以发现，这两组解其实是以参考帧为中心，绕Z轴呈180度旋转对称的两组解，如下图所示
+其中$\mathbf{R}_z(\frac{\pi}{2})$，表示沿Z轴旋转90度的旋转矩阵。对比上面两个式子可以发现，这两组解其实是以**参考帧frame 1**为中心，绕Z轴呈180度旋转对称的两组解，如下图所示
 ![alt text](image-9.png) 
  
 同时，由于本质矩阵E可以取任意符号，即E和-E是等价的，所以对任意一个E取负号又取得一个符合条件的解，所以一共有四组符合条件的解。
